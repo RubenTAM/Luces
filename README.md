@@ -87,10 +87,25 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 ## Useful Commands
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
+- `npm run dev`: start local development with Next.js
+- `npm run build`: create the production Next.js build
+- `npm start`: serve the production build (uses DigitalOcean's `PORT` variable)
 - `npm test`: build the starter and verify its rendered loading skeleton
 - `npm run db:generate`: generate Drizzle migrations after schema changes
+
+## DigitalOcean App Platform
+
+Deploy this repository as a **Web Service** with these settings:
+
+- Repository: `RubenTAM/Luces`
+- Branch: `main`
+- Build command: `npm run build`
+- Run command: `npm start`
+- HTTP port: `8080` (the run command also honors the platform-provided `PORT`)
+
+The dashboard does not currently require the PostgreSQL database shown in the
+DigitalOcean project, so replacing the existing web component does not require
+changing or deleting that database.
 
 ## Learn More
 
