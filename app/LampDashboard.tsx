@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 
 type Mode = "AUTO" | "MAN";
-type IconName = "home" | "settings" | "history" | "headset" | "sun" | "calendar" | "clock" | "wifi" | "lamp" | "power" | "search" | "grid" | "list" | "check" | "refresh" | "chevron" | "hand" | "arrowUp" | "arrowDown" | "more";
+type IconName = "home" | "settings" | "history" | "headset" | "sun" | "calendar" | "clock" | "wifi" | "lamp" | "power" | "search" | "grid" | "list" | "check" | "refresh" | "chevron" | "hand" | "arrowUp" | "arrowDown" | "more" | "close";
 
 type Lamp = {
   id: number;
@@ -47,12 +47,9 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
     check: <path d="m5 12 4.5 4.5L19 7"/>, refresh: <><path d="M20 7v5h-5"/><path d="M4 17v-5h5M18.5 9A7 7 0 0 0 6 6.5L4 9m16 6-2 2.5A7 7 0 0 1 5.5 15"/></>,
     chevron: <path d="m9 18 6-6-6-6"/>, hand: <path d="M8 11V6a1.5 1.5 0 0 1 3 0v4-6a1.5 1.5 0 0 1 3 0v6-4a1.5 1.5 0 0 1 3 0v5-2a1.5 1.5 0 0 1 3 0v4c0 5-3 8-8 8h-1c-2 0-3.5-1-5-3l-3-4a1.7 1.7 0 0 1 2.7-2l2.3 2"/>,
     arrowUp: <><path d="m7 11 5-5 5 5M12 6v12"/></>, arrowDown: <><path d="m7 13 5 5 5-5M12 18V6"/></>, more: <><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></>,
+    close: <><path d="M6 6l12 12"/><path d="M18 6 6 18"/></>,
   };
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" {...common}>{paths[name]}</svg>;
-}
-
-function Metric({ icon, tone, label, value, detail }: { icon: IconName; tone: string; label: string; value: string; detail: string }) {
-  return <article className="metric-card"><span className={`metric-icon ${tone}`}><Icon name={icon} size={28}/></span><div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div></article>;
 }
 
 function formatTime(value: string) {
@@ -62,13 +59,22 @@ function formatTime(value: string) {
   return `${shownHour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")} ${suffix}`;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: string };
+
 export function LampDashboard() {
   const [lamps, setLamps] = useState<Lamp[]>(initialLamps);
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [editState, setEditState] = useState<EditState | null>(null);
 
   const updateLamp = (id: number, updater: (lamp: Lamp) => Lamp) => setLamps((current) => current.map((lamp) => lamp.id === id ? updater(lamp) : lamp));
 
   // LÁMPARA 1 está conectada de verdad al LOGO de Siemens vía MQTT. Las demás
   // tarjetas siguen siendo datos de prueba hasta que se conecten sus propios horarios.
+  // El mismo polling nos dice si el servidor sigue conectado y escuchando el broker.
   useEffect(() => {
     let cancelled = false;
 
@@ -77,6 +83,7 @@ export function LampDashboard() {
         const response = await fetch("/api/lamp1", { cache: "no-store" });
         if (!response.ok || cancelled) return;
         const data = await response.json();
+        setConnected(Boolean(data.connected));
         setLamps((current) => current.map((lamp) => {
           if (lamp.id !== 1) return lamp;
           return {
@@ -86,24 +93,40 @@ export function LampDashboard() {
           };
         }));
       } catch {
-        // sin conexión al servidor/broker: mantenemos el último valor conocido
+        if (!cancelled) setConnected(false);
       }
     }
 
     poll();
-    const interval = setInterval(poll, 4000);
+    const interval = setInterval(poll, 3000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  const updateLampTime = (id: number, which: "on" | "off", time: string) => {
-    updateLamp(id, (item) => which === "on" ? { ...item, onTime: time } : { ...item, offTime: time });
-    if (id === 1) {
+  const openEdit = (lamp: Lamp, which: "on" | "off") => {
+    const [hour, minute] = (which === "on" ? lamp.onTime : lamp.offTime).split(":");
+    setEditState({ lampId: lamp.id, which, hour, minute });
+  };
+
+  const applyEdit = () => {
+    if (!editState) return;
+    const hour = clamp(parseInt(editState.hour || "0", 10) || 0, 0, 23);
+    const minute = clamp(parseInt(editState.minute || "0", 10) || 0, 0, 59);
+    const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+    const { lampId, which } = editState;
+
+    if (lampId === 1) {
+      // Lámpara real: publicamos al broker; la tarjeta se actualizará sola
+      // cuando el LOGO confirme el cambio en logo/planta1/status.
       fetch("/api/lamp1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ which, time }),
       }).catch(() => {});
+    } else {
+      updateLamp(lampId, (item) => which === "on" ? { ...item, onTime: time } : { ...item, offTime: time });
     }
+
+    setEditState(null);
   };
 
   return <main className="sip-shell">
@@ -121,17 +144,11 @@ export function LampDashboard() {
     <section className="sip-main">
       <header className="sip-header">
         <div><h1>Control de Lámparas</h1><p>Resumen del sistema</p></div>
-        <div className="header-facts"><span><Icon name="sun"/>23 °C</span><span><Icon name="calendar"/>22 may 2024</span><span><Icon name="clock"/>10:42 a.m.</span><i/><span><b className="connected-dot"/>Conectado</span></div>
+        <div className="header-facts"><span><Icon name="sun"/>23 °C</span><span><Icon name="calendar"/>22 may 2024</span><span><Icon name="clock"/>10:42 a.m.</span><i/><span className={connected === false ? "status-disconnected" : ""}><b className={`connected-dot ${connected === false ? "off" : connected === null ? "pending" : ""}`}/>{connected === null ? "Verificando…" : connected ? "Conectado" : "Desconectado"}</span></div>
       </header>
 
       <div className="dashboard-content">
         <section className="workspace">
-          <div className="metrics">
-            <Metric icon="lamp" tone="navy" label="Total de lámparas" value="15" detail="Dispositivos registrados"/>
-            <Metric icon="power" tone="green" label="Encendidas" value="8" detail="53% del total"/>
-            <Metric icon="power" tone="gray" label="Apagadas" value="7" detail="47% del total"/>
-          </div>
-
           <div className="controls-heading">
             <h2><span/>Control individual</h2>
             <div className="view-controls"><button className="selected" type="button" aria-label="Vista de cuadrícula"><Icon name="grid"/></button><button type="button" aria-label="Vista de lista"><Icon name="list"/></button></div>
@@ -148,9 +165,9 @@ export function LampDashboard() {
                 </span>
               </button>
               <div className="schedule-row">
-                <label className="schedule-col"><span className="label">Encendido</span><span className="value">{formatTime(lamp.onTime)}</span><input aria-label={`Hora de encendido de lámpara ${lamp.id}`} type="time" value={lamp.onTime} onChange={(event) => updateLampTime(lamp.id, "on", event.target.value)}/></label>
+                <button type="button" className="schedule-col" onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de lámpara ${lamp.id}`}><span className="label">Encendido</span><span className="value">{formatTime(lamp.onTime)}</span></button>
                 <span className="schedule-dot">•</span>
-                <label className="schedule-col"><span className="label">Apagado</span><span className="value">{formatTime(lamp.offTime)}</span><input aria-label={`Hora de apagado de lámpara ${lamp.id}`} type="time" value={lamp.offTime} onChange={(event) => updateLampTime(lamp.id, "off", event.target.value)}/></label>
+                <button type="button" className="schedule-col" onClick={() => openEdit(lamp, "off")} aria-label={`Cambiar hora de apagado de lámpara ${lamp.id}`}><span className="label">Apagado</span><span className="value">{formatTime(lamp.offTime)}</span></button>
               </div>
             </article>)}
           </section>
@@ -163,5 +180,31 @@ export function LampDashboard() {
         </aside>
       </div>
     </section>
+
+    {editState && (
+      <div className="modal-backdrop" onClick={() => setEditState(null)}>
+        <div className="modal-box" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-head">
+            <h3>Hora de {editState.which === "on" ? "encendido" : "apagado"} — LÁMPARA {editState.lampId}</h3>
+            <button type="button" className="modal-close" onClick={() => setEditState(null)} aria-label="Cerrar"><Icon name="close" size={15}/></button>
+          </div>
+          <div className="modal-body">
+            <label className="modal-field">
+              <span>Horas</span>
+              <input type="number" inputMode="numeric" min={0} max={23} value={editState.hour} onChange={(event) => setEditState({ ...editState, hour: event.target.value })}/>
+            </label>
+            <span className="modal-colon">:</span>
+            <label className="modal-field">
+              <span>Minutos</span>
+              <input type="number" inputMode="numeric" min={0} max={59} value={editState.minute} onChange={(event) => setEditState({ ...editState, minute: event.target.value })}/>
+            </label>
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="modal-cancel" onClick={() => setEditState(null)}>Cancelar</button>
+            <button type="button" className="modal-apply" onClick={applyEdit}>Aplicar</button>
+          </div>
+        </div>
+      </div>
+    )}
   </main>;
 }
