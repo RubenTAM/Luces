@@ -7,6 +7,11 @@ const BROKER_PASSWORD = "123456789";
 
 const CMD_TOPIC = "logo/planta1/cmd";
 const STATUS_TOPIC = "logo/planta1/status";
+// Topic propio del dashboard (no lo usa el LOGO) donde guardamos el horario
+// como mensaje "retained" — así HiveMQ nos lo entrega solo al reconectar, y
+// el horario sobrevive a un redeploy o reinicio del servidor sin depender
+// de un disco propio (que en DigitalOcean App Platform no es persistente).
+const SCHEDULE_TOPIC = "sip/dashboard/schedule";
 
 // Total de lámparas que el LOGO puede reportar. Cada una tiene sus propias
 // tags: Auto_N (modo), FB_LampN (encendido real) y TurnOn_N (forzar
@@ -47,9 +52,8 @@ type InternalState = {
 
 const state: InternalState = {
   reported: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, { isOn: null, mode: null }])),
-  // Horario por defecto hasta que se edite desde el dashboard: encendida de
-  // noche, apagada de día. Vive solo en memoria de este servidor (ver nota
-  // de persistencia pendiente).
+  // Horario por defecto hasta que se edite desde el dashboard o llegue el
+  // valor guardado (retained) del broker: encendida de noche, apagada de día.
   schedule: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, { onTime: "18:00", offTime: "06:00" }])),
   commandedOn: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, null])),
   updatedAt: null,
@@ -87,6 +91,30 @@ function isWithinSchedule(logoTimeSeconds: number, entry: ScheduleEntry): boolea
 
 function buildPowerPayload(id: number, on: boolean): string {
   return JSON.stringify({ state: { [`TurnOn_${id}`]: { value: [on ? 1 : 0] } } });
+}
+
+// Publica el horario completo como mensaje retained en SCHEDULE_TOPIC, para
+// que quede guardado en el broker y se recupere solo al reconectar.
+function persistSchedule(client: MqttClient) {
+  client.publish(SCHEDULE_TOPIC, JSON.stringify(state.schedule), { qos: 1, retain: true });
+}
+
+const TIME_RE = /^\d{2}:\d{2}$/;
+
+// Reconstruye state.schedule a partir del mensaje retained guardado en el
+// broker. Valida cada entrada por si el formato cambiara en el futuro.
+function loadPersistedSchedule(payload: Buffer) {
+  try {
+    const data = JSON.parse(payload.toString());
+    for (let id = 1; id <= LAMP_COUNT; id++) {
+      const entry = data?.[id];
+      if (entry && TIME_RE.test(entry.onTime) && TIME_RE.test(entry.offTime)) {
+        state.schedule[id] = { onTime: entry.onTime, offTime: entry.offTime };
+      }
+    }
+  } catch (err) {
+    console.error("[mqtt] horario guardado inválido:", err);
+  }
 }
 
 // Compara la hora actual contra el horario guardado de una lámpara y, si
@@ -132,6 +160,10 @@ function getClient(): MqttClient {
       client.subscribe(STATUS_TOPIC, (err) => {
         if (err) console.error("[mqtt] no se pudo suscribir a", STATUS_TOPIC, err);
       });
+      // El broker nos entrega de inmediato el último horario retained (si hay).
+      client.subscribe(SCHEDULE_TOPIC, (err) => {
+        if (err) console.error("[mqtt] no se pudo suscribir a", SCHEDULE_TOPIC, err);
+      });
     });
 
     client.on("close", () => {
@@ -147,6 +179,10 @@ function getClient(): MqttClient {
     });
 
     client.on("message", (topic, payload) => {
+      if (topic === SCHEDULE_TOPIC) {
+        loadPersistedSchedule(payload);
+        return;
+      }
       if (topic !== STATUS_TOPIC) return;
       try {
         const data = JSON.parse(payload.toString());
@@ -216,6 +252,7 @@ export function setLampSchedule(id: number, which: "on" | "off", time: string): 
   state.schedule[id][which === "on" ? "onTime" : "offTime"] = time;
 
   const client = getClient();
+  persistSchedule(client);
   evaluateSchedule(client, id);
 }
 

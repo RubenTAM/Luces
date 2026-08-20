@@ -151,9 +151,17 @@ export function LampDashboard() {
     const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
     const { lampId, which } = editState;
 
+    // Actualizamos la tarjeta al instante (no esperamos al próximo poll de
+    // 3s) para que no se vea la hora vieja unos segundos antes de refrescar.
+    setLamps((current) => current.map((lamp) => {
+      if (lamp.id !== lampId) return lamp;
+      return which === "on" ? { ...lamp, onTime: time } : { ...lamp, offTime: time };
+    }));
+
     // El horario ya no se le manda al LOGO: se guarda en el servidor, que
     // compara contra la hora del LOGO y publica TurnOn_N solo cuando toque
-    // encender/apagar. La tarjeta se actualiza sola vía FB_LampN.
+    // encender/apagar. El encendido/apagado real de la tarjeta se sigue
+    // actualizando solo vía FB_LampN.
     fetch("/api/lamps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
