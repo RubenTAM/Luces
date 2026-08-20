@@ -183,22 +183,13 @@ export function LampDashboard() {
 
   const forcePower = (lamp: Lamp) => {
     // Forzado de emergencia: publica TurnOn_N y saca la lámpara del control
-    // del horario hasta que se libere (ver releaseForce). El ícono y la
+    // del horario hasta que se libere del lado del servidor. El ícono y la
     // tarjeta se pondrán en verde/gris solos cuando el LOGO confirme el
     // cambio real vía FB_LampN.
     fetch("/api/lamps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lampId: lamp.id, power: lamp.isOn ? 0 : 1 }),
-    }).catch(() => {});
-  };
-
-  const releaseForce = (lamp: Lamp) => {
-    // Devuelve la lámpara al control del horario automático.
-    fetch("/api/lamps", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lampId: lamp.id, release: true }),
     }).catch(() => {});
   };
 
@@ -244,9 +235,6 @@ export function LampDashboard() {
                     <small className="readonly">{active ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
                   </span>
                 </button>
-                {active && lamp.forced && (
-                  <button type="button" className="release-force" onClick={() => releaseForce(lamp)}>Volver a horario automático</button>
-                )}
                 <div className="schedule-row">
                   <button type="button" className="schedule-col" disabled={!active} onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de lámpara ${lamp.id}`}><span className="label">Encendido</span><span className="value">{active ? formatTime(lamp.onTime) : PLACEHOLDER}</span></button>
                   <span className="schedule-dot">•</span>

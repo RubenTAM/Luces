@@ -56,7 +56,17 @@ type InternalState = {
   logoTime: number | null;
 };
 
-const state: InternalState = {
+declare global {
+  // eslint-disable-next-line no-var
+  var __sipMqttClient: MqttClient | undefined;
+  // eslint-disable-next-line no-var
+  var __sipState: InternalState | undefined;
+}
+
+// Se guarda en globalThis (igual que el cliente MQTT) para que sobreviva a
+// que Next.js vuelva a evaluar este módulo en desarrollo (Fast Refresh) —
+// si no, "forced"/"schedule" se reiniciaban solos y la UI parecía parpadear.
+const state: InternalState = globalThis.__sipState ?? {
   reported: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, { isOn: null, mode: null }])),
   // Horario por defecto hasta que se edite desde el dashboard o llegue el
   // valor guardado (retained) del broker: encendida de noche, apagada de día.
@@ -67,6 +77,7 @@ const state: InternalState = {
   connected: false,
   logoTime: null,
 };
+globalThis.__sipState = state;
 
 // Si el LOGO deja de mandar datos por más de este tiempo, lo consideramos
 // desconectado aunque el socket con el broker siga técnicamente abierto:
@@ -150,11 +161,6 @@ function evaluateSchedule(client: MqttClient, id: number) {
 
   state.commandedOn[id] = desiredOn;
   client.publish(CMD_TOPIC, buildPowerPayload(id, desiredOn), { qos: 0 });
-}
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __sipMqttClient: MqttClient | undefined;
 }
 
 function getClient(): MqttClient {
