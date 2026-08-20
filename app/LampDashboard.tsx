@@ -63,11 +63,25 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function formatClockTime(date: Date) {
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  const seconds = date.getSeconds().toString().padStart(2, "0");
+  const suffix = date.getHours() >= 12 ? "p.m." : "a.m.";
+  const hour = date.getHours() % 12 || 12;
+  return `${hour.toString().padStart(2, "0")}:${minutes}:${seconds} ${suffix}`;
+}
+
+// Lámparas que ya están conectadas de verdad al LOGO y reportan sus propias
+// tags (Auto_N / FB_LampN). Solo estas cuentan en el resumen rápido; amplía
+// este set cuando más lámparas tengan tags reales del broker.
+const taggedLampIds = new Set([1]);
+
 type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: string };
 
 export function LampDashboard() {
   const [lamps, setLamps] = useState<Lamp[]>(initialLamps);
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
 
   const updateLamp = (id: number, updater: (lamp: Lamp) => Lamp) => setLamps((current) => current.map((lamp) => lamp.id === id ? updater(lamp) : lamp));
@@ -84,6 +98,7 @@ export function LampDashboard() {
         if (!response.ok || cancelled) return;
         const data = await response.json();
         setConnected(Boolean(data.connected));
+        setLastUpdated(new Date());
         setLamps((current) => current.map((lamp) => {
           if (lamp.id !== 1) return lamp;
           return {
@@ -103,6 +118,12 @@ export function LampDashboard() {
     const interval = setInterval(poll, 3000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
+
+  const trackedLamps = lamps.filter((lamp) => taggedLampIds.has(lamp.id));
+  const autoCount = trackedLamps.filter((lamp) => lamp.mode === "AUTO").length;
+  const onCount = trackedLamps.filter((lamp) => lamp.isOn).length;
+  const offCount = trackedLamps.length - onCount;
+  const systemStatus = connected === false ? "offline" : connected === null ? "pending" : "online";
 
   const openEdit = (lamp: Lamp, which: "on" | "off") => {
     const [hour, minute] = (which === "on" ? lamp.onTime : lamp.offTime).split(":");
@@ -178,8 +199,13 @@ export function LampDashboard() {
         </section>
 
         <aside className="right-rail">
-          <section className="status-card"><h2>Estado del sistema</h2><div className="status-ring"><Icon name="check" size={45}/></div><strong>Todo funcionando correctamente</strong><div className="updated"><span>Última actualización: 10:42:15 a.m.</span><button type="button" aria-label="Actualizar"><Icon name="refresh" size={17}/></button></div></section>
-          <section className="rail-card quick"><h2>Resumen rápido</h2><ul><li><span className="blue"><Icon name="lamp"/>Total de lámparas</span><b>15</b></li><li><span className="green-text"><Icon name="power"/>Encendidas</span><b>8</b></li><li><span className="gray-text"><Icon name="power"/>Apagadas</span><b>7</b></li></ul></section>
+          <section className={`status-card ${systemStatus !== "online" ? systemStatus : ""}`}>
+            <h2>Estado del sistema</h2>
+            <div className="status-ring"><Icon name={systemStatus === "offline" ? "close" : systemStatus === "pending" ? "clock" : "check"} size={45}/></div>
+            <strong>{systemStatus === "offline" ? "Desconectado del broker" : systemStatus === "pending" ? "Verificando conexión…" : "Todo funcionando correctamente"}</strong>
+            <div className="updated"><span>Última actualización: {lastUpdated ? formatClockTime(lastUpdated) : "—"}</span><button type="button" aria-label="Actualizar" onClick={() => window.location.reload()}><Icon name="refresh" size={17}/></button></div>
+          </section>
+          <section className="rail-card quick"><h2>Resumen rápido</h2><ul><li><span className="blue"><Icon name="lamp"/>Total de lámparas en automático</span><b>{autoCount}</b></li><li><span className="green-text"><Icon name="power"/>Encendidas</span><b>{onCount}</b></li><li><span className="gray-text"><Icon name="power"/>Apagadas</span><b>{offCount}</b></li></ul></section>
           <section className="rail-card activity"><h2>Actividad reciente</h2><ul><li><i className="up"><Icon name="arrowUp"/></i><span>LÁMPARA 8 encendida</span><time>10:15 a.m.</time></li><li><i><Icon name="arrowDown"/></i><span>LÁMPARA 3 apagada</span><time>10:00 a.m.</time></li><li><i className="hand"><Icon name="hand"/></i><span>LÁMPARA 14 modo manual</span><time>09:45 a.m.</time></li><li><i className="up"><Icon name="arrowUp"/></i><span>LÁMPARA 1 encendida</span><time>09:30 a.m.</time></li><li><i><Icon name="arrowDown"/></i><span>LÁMPARA 6 apagada</span><time>09:15 a.m.</time></li></ul><a href="#historial">Ver historial completo <Icon name="chevron" size={16}/></a></section>
         </aside>
       </div>
