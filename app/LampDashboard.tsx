@@ -152,6 +152,21 @@ export function LampDashboard() {
     setEditState(null);
   };
 
+  const forcePower = (lamp: Lamp) => {
+    if (lamp.id === 1) {
+      // Lámpara real: publicamos a la tag TurnOn_1 para forzar el encendido.
+      // El ícono y la tarjeta se pondrán en verde/gris solos cuando el LOGO
+      // confirme el cambio real vía FB_Lamp1.
+      fetch("/api/lamp1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ power: lamp.isOn ? 0 : 1 }),
+      }).catch(() => {});
+    } else {
+      updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }));
+    }
+  };
+
   return <main className="sip-shell">
     <aside className="sip-sidebar" aria-label="Navegación principal">
       <div className="sip-logo-box"><Image className="sip-logo-image" src="/sip-logo-cropped.png" alt="SIP Sistemas Inteligentes del Pacífico" width={320} height={143} priority unoptimized/></div>
@@ -179,7 +194,12 @@ export function LampDashboard() {
 
           <section className="lamp-board" aria-label="Control de lámparas">
             {lamps.map((lamp) => <article className="sip-card" key={lamp.id}>
-              <div className="card-head"><h3>LÁMPARA {lamp.id}</h3></div>
+              <div className="card-head">
+                <h3>LÁMPARA {lamp.id}</h3>
+                <button type="button" className={`power-toggle ${lamp.isOn ? "on" : ""}`} onClick={() => forcePower(lamp)} aria-label={`Forzar ${lamp.isOn ? "apagado" : "encendido"} de lámpara ${lamp.id}`}>
+                  <Icon name="power" size={15}/>
+                </button>
+              </div>
               <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} disabled={lamp.id === 1} onClick={lamp.id === 1 ? undefined : () => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={lamp.id === 1 ? undefined : `${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}>
                 <span className="status-icon"><Icon name="lamp" size={22}/></span>
                 <span className="status-text">

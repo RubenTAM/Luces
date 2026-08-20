@@ -103,3 +103,11 @@ export function setLamp1Time(which: "on" | "off", time: string): void {
   const payload = JSON.stringify({ state: { [field]: { value: [value] } } });
   client.publish(CMD_TOPIC, payload, { qos: 0 });
 }
+
+// Fuerza el encendido/apagado manual de la lámpara 1. El LOGO confirma el
+// cambio real a través de FB_Lamp1 en logo/planta1/status.
+export function setLamp1Power(on: boolean): void {
+  const client = getClient();
+  const payload = JSON.stringify({ state: { TurnOn_1: { value: [on ? 1 : 0] } } });
+  client.publish(CMD_TOPIC, payload, { qos: 0 });
+}
