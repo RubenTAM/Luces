@@ -91,7 +91,6 @@ export function LampDashboard() {
             <Metric icon="lamp" tone="navy" label="Total de lámparas" value="15" detail="Dispositivos registrados"/>
             <Metric icon="power" tone="green" label="Encendidas" value="8" detail="53% del total"/>
             <Metric icon="power" tone="gray" label="Apagadas" value="7" detail="47% del total"/>
-            <Metric icon="clock" tone="amber" label="Próximo evento" value="11:00 a.m." detail="LÁMPARA 14 · Encendido"/>
           </div>
 
           <div className="controls-heading">
@@ -102,16 +101,25 @@ export function LampDashboard() {
           <section className="lamp-board" aria-label="Control de lámparas">
             {lamps.map((lamp) => <article className="sip-card" key={lamp.id}>
               <div className="card-head"><h3>LÁMPARA {lamp.id}</h3></div>
-              <button className={`lamp-state ${lamp.isOn ? "on" : ""}`} onClick={() => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={`${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}><Icon name="lamp" size={27}/></button>
-              <div className="mode-toggle" role="group" aria-label={`Modo de lámpara ${lamp.id}`}><button className={lamp.mode === "AUTO" ? "active" : ""} onClick={() => updateLamp(lamp.id, item => ({ ...item, mode: "AUTO" }))} type="button">AUTO</button><button className={lamp.mode === "MAN" ? "active" : ""} onClick={() => updateLamp(lamp.id, item => ({ ...item, mode: "MAN" }))} type="button">MAN</button></div>
-              <div className="schedule-box"><label><span><i className="off-dot"/>Apagado</span><input aria-label={`Hora de apagado de lámpara ${lamp.id}`} type="time" value={lamp.offTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, offTime: event.target.value }))}/><b>{formatTime(lamp.offTime)}</b></label><label><span><i/>Encendido</span><input aria-label={`Hora de encendido de lámpara ${lamp.id}`} type="time" value={lamp.onTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, onTime: event.target.value }))}/><b>{formatTime(lamp.onTime)}</b></label></div>
+              <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} onClick={() => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={`${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}>
+                <span className="status-icon"><Icon name="lamp" size={22}/></span>
+                <span className="status-text">
+                  <b>{lamp.isOn ? "Encendida" : "Apagada"}</b>
+                  <small onClick={(event) => { event.stopPropagation(); updateLamp(lamp.id, item => ({ ...item, mode: item.mode === "AUTO" ? "MAN" : "AUTO" })); }} role="button" aria-label={`Cambiar modo de lámpara ${lamp.id}`}>Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>
+                </span>
+              </button>
+              <div className="schedule-row">
+                <label className="schedule-col"><span className="label">Encendido</span><span className="value">{formatTime(lamp.onTime)}</span><input aria-label={`Hora de encendido de lámpara ${lamp.id}`} type="time" value={lamp.onTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, onTime: event.target.value }))}/></label>
+                <span className="schedule-dot">•</span>
+                <label className="schedule-col"><span className="label">Apagado</span><span className="value">{formatTime(lamp.offTime)}</span><input aria-label={`Hora de apagado de lámpara ${lamp.id}`} type="time" value={lamp.offTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, offTime: event.target.value }))}/></label>
+              </div>
             </article>)}
           </section>
         </section>
 
         <aside className="right-rail">
           <section className="status-card"><h2>Estado del sistema</h2><div className="status-ring"><Icon name="check" size={45}/></div><strong>Todo funcionando correctamente</strong><div className="updated"><span>Última actualización: 10:42:15 a.m.</span><button type="button" aria-label="Actualizar"><Icon name="refresh" size={17}/></button></div></section>
-          <section className="rail-card quick"><h2>Resumen rápido</h2><ul><li><span className="blue"><Icon name="lamp"/>Total de lámparas</span><b>15</b></li><li><span className="green-text"><Icon name="power"/>Encendidas</span><b>8</b></li><li><span className="gray-text"><Icon name="power"/>Apagadas</span><b>7</b></li><li><span className="amber-text"><Icon name="clock"/>Programadas hoy</span><b>30 <Icon name="chevron" size={16}/></b></li></ul></section>
+          <section className="rail-card quick"><h2>Resumen rápido</h2><ul><li><span className="blue"><Icon name="lamp"/>Total de lámparas</span><b>15</b></li><li><span className="green-text"><Icon name="power"/>Encendidas</span><b>8</b></li><li><span className="gray-text"><Icon name="power"/>Apagadas</span><b>7</b></li></ul></section>
           <section className="rail-card activity"><h2>Actividad reciente</h2><ul><li><i className="up"><Icon name="arrowUp"/></i><span>LÁMPARA 8 encendida</span><time>10:15 a.m.</time></li><li><i><Icon name="arrowDown"/></i><span>LÁMPARA 3 apagada</span><time>10:00 a.m.</time></li><li><i className="hand"><Icon name="hand"/></i><span>LÁMPARA 14 modo manual</span><time>09:45 a.m.</time></li><li><i className="up"><Icon name="arrowUp"/></i><span>LÁMPARA 1 encendida</span><time>09:30 a.m.</time></li><li><i><Icon name="arrowDown"/></i><span>LÁMPARA 6 apagada</span><time>09:15 a.m.</time></li></ul><a href="#historial">Ver historial completo <Icon name="chevron" size={16}/></a></section>
         </aside>
       </div>
