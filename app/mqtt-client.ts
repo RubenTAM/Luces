@@ -11,11 +11,13 @@ const STATUS_TOPIC = "logo/planta1/status";
 type Lamp1State = {
   onTime: string | null;
   offTime: string | null;
+  isOn: boolean | null;
+  mode: "AUTO" | "MAN" | null;
   updatedAt: number | null;
   connected: boolean;
 };
 
-const state: Lamp1State = { onTime: null, offTime: null, updatedAt: null, connected: false };
+const state: Lamp1State = { onTime: null, offTime: null, isOn: null, mode: null, updatedAt: null, connected: false };
 
 // El LOGO manda las horas como un entero decimal que, en hex, es "HHMM".
 // Ej: 10:00 -> 0x1000 -> 4096. 08:15 -> 0x0815 -> 2069.
@@ -72,8 +74,12 @@ function getClient(): MqttClient {
         if (!reported) return;
         const onValue = reported.HoraOn1?.value?.[0];
         const offValue = reported.HoraOff1?.value?.[0];
+        const autoValue = reported.Auto_1?.value?.[0];
+        const fbValue = reported.FB_Lamp1?.value?.[0];
         if (typeof onValue === "number") state.onTime = decodeHour(onValue);
         if (typeof offValue === "number") state.offTime = decodeHour(offValue);
+        if (typeof autoValue === "number") state.mode = autoValue === 1 ? "AUTO" : "MAN";
+        if (typeof fbValue === "number") state.isOn = fbValue === 1;
         state.updatedAt = Date.now();
       } catch (err) {
         console.error("[mqtt] payload inválido en", topic, err);

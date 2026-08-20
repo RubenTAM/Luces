@@ -90,6 +90,8 @@ export function LampDashboard() {
             ...lamp,
             onTime: data.onTime ?? lamp.onTime,
             offTime: data.offTime ?? lamp.offTime,
+            isOn: data.isOn ?? lamp.isOn,
+            mode: data.mode ?? lamp.mode,
           };
         }));
       } catch {
@@ -157,11 +159,13 @@ export function LampDashboard() {
           <section className="lamp-board" aria-label="Control de lámparas">
             {lamps.map((lamp) => <article className="sip-card" key={lamp.id}>
               <div className="card-head"><h3>LÁMPARA {lamp.id}</h3></div>
-              <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} onClick={() => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={`${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}>
+              <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} disabled={lamp.id === 1} onClick={lamp.id === 1 ? undefined : () => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={lamp.id === 1 ? undefined : `${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}>
                 <span className="status-icon"><Icon name="lamp" size={22}/></span>
                 <span className="status-text">
                   <b>{lamp.isOn ? "Encendida" : "Apagada"}</b>
-                  <small onClick={(event) => { event.stopPropagation(); updateLamp(lamp.id, item => ({ ...item, mode: item.mode === "AUTO" ? "MAN" : "AUTO" })); }} role="button" aria-label={`Cambiar modo de lámpara ${lamp.id}`}>Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>
+                  {lamp.id === 1
+                    ? <small className="readonly">Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>
+                    : <small onClick={(event) => { event.stopPropagation(); updateLamp(lamp.id, item => ({ ...item, mode: item.mode === "AUTO" ? "MAN" : "AUTO" })); }} role="button" aria-label={`Cambiar modo de lámpara ${lamp.id}`}>Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>}
                 </span>
               </button>
               <div className="schedule-row">

@@ -44,8 +44,11 @@ button { cursor:pointer; }
 .status-text { display:flex; min-width:0; flex-direction:column; gap:3px; }
 .status-text b { font-size:15px; font-weight:800; color:var(--ink); }
 .lamp-status.on .status-text b { color:#00a85b; }
-.status-text small { color:#7c8798; font-size:12px; font-weight:600; }
+.status-text small { color:#7c8798; font-size:12px; font-weight:600; cursor:pointer; }
 .status-text small:hover { color:#385274; text-decoration:underline; }
+.status-text small.readonly { cursor:default; }
+.status-text small.readonly:hover { color:#7c8798; text-decoration:none; }
+.lamp-status:disabled { cursor:default; }
 .schedule-row { display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:15px; border-top:1px solid var(--line); }
 .schedule-col { position:relative; display:flex; min-width:0; flex-direction:column; gap:3px; padding:0; border:0; background:transparent; text-align:left; cursor:pointer; }
 .schedule-col .label { color:#7c8798; font-size:11px; font-weight:650; }
