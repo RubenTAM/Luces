@@ -39,6 +39,12 @@ const state: BrokerState = {
   logoTime: null,
 };
 
+// Si el LOGO deja de mandar datos por más de este tiempo, lo consideramos
+// desconectado aunque el socket con el broker siga técnicamente abierto:
+// "conectado" significa que el LOGO está vivo y escribiendo, no solo que
+// nuestro servidor tiene sesión con HiveMQ.
+const STALE_AFTER_MS = 60_000;
+
 // El LOGO manda las horas como un entero decimal que, en hex, es "HHMM".
 // Ej: 10:00 -> 0x1000 -> 4096. 08:15 -> 0x0815 -> 2069.
 function decodeHour(value: number): string {
@@ -121,10 +127,14 @@ function getClient(): MqttClient {
 
 export function getLampsState(): BrokerState {
   getClient();
+  const dataIsFresh = state.updatedAt !== null && Date.now() - state.updatedAt < STALE_AFTER_MS;
   return {
     lamps: Object.fromEntries(Object.entries(state.lamps).map(([id, lamp]) => [id, { ...lamp }])),
     updatedAt: state.updatedAt,
-    connected: state.connected,
+    // "Conectado" = tenemos sesión con el broker Y el LOGO nos ha escrito
+    // datos en el último minuto. Si deja de mandar, se marca desconectado
+    // aunque el socket siga abierto.
+    connected: state.connected && dataIsFresh,
     logoTime: state.logoTime,
   };
 }
