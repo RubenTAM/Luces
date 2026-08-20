@@ -71,12 +71,31 @@ function formatClockTime(date: Date) {
   return `${hour.toString().padStart(2, "0")}:${minutes}:${seconds} ${suffix}`;
 }
 
+const LOGO_MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// El LOGO manda "$logotime" como un Unix timestamp (segundos desde 1970-01-01).
+// Por ahora se muestra tal cual en UTC (sin ajustar zona horaria) — usamos
+// getUTC* para que se vea igual sin importar la zona horaria de quien lo esté
+// viendo. Pendiente confirmar con Ruben si hay que desplazarlo a la hora local
+// de la planta (p. ej. UTC-7).
+function formatLogoDateTime(epochSeconds: number) {
+  const date = new Date(epochSeconds * 1000);
+  const readable = `${date.getUTCDate()} ${LOGO_MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+  const hours24 = date.getUTCHours();
+  const minutes = date.getUTCMinutes().toString().padStart(2, "0");
+  const suffix = hours24 >= 12 ? "p.m." : "a.m.";
+  const hours12 = (hours24 % 12) || 12;
+  const time = `${hours12.toString().padStart(2, "0")}:${minutes} ${suffix}`;
+  return { date: readable, time };
+}
+
 type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: string };
 
 export function LampDashboard() {
   const [lamps, setLamps] = useState<Lamp[]>(initialLamps);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [logoTime, setLogoTime] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
 
   // Las 15 lámparas están conectadas al LOGO de Siemens vía MQTT: el estado
@@ -92,6 +111,7 @@ export function LampDashboard() {
         const data = await response.json();
         setConnected(Boolean(data.connected));
         setLastUpdated(new Date());
+        if (typeof data.logoTime === "number") setLogoTime(data.logoTime);
         setLamps((current) => current.map((lamp) => {
           const reported = data.lamps?.[lamp.id];
           if (!reported) return lamp;
@@ -113,6 +133,7 @@ export function LampDashboard() {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
+  const logoDateTime = logoTime !== null ? formatLogoDateTime(logoTime) : null;
   const autoCount = lamps.filter((lamp) => lamp.mode === "AUTO").length;
   const onCount = lamps.filter((lamp) => lamp.isOn).length;
   const offCount = lamps.length - onCount;
@@ -167,7 +188,7 @@ export function LampDashboard() {
     <section className="sip-main">
       <header className="sip-header">
         <div><h1>Control de Lámparas</h1><p>Resumen del sistema</p></div>
-        <div className="header-facts"><span><Icon name="sun"/>23 °C</span><span><Icon name="calendar"/>22 may 2024</span><span><Icon name="clock"/>10:42 a.m.</span><i/><span className={connected === false ? "status-disconnected" : ""}><b className={`connected-dot ${connected === false ? "off" : connected === null ? "pending" : ""}`}/>{connected === null ? "Verificando…" : connected ? "Conectado" : "Desconectado"}</span></div>
+        <div className="header-facts"><span><Icon name="sun"/>23 °C</span><span><Icon name="calendar"/>{logoDateTime ? logoDateTime.date : "—"}</span><span><Icon name="clock"/>{logoDateTime ? logoDateTime.time : "—"}</span><i/><span className={connected === false ? "status-disconnected" : ""}><b className={`connected-dot ${connected === false ? "off" : connected === null ? "pending" : ""}`}/>{connected === null ? "Verificando…" : connected ? "Conectado" : "Desconectado"}</span></div>
       </header>
 
       <div className="dashboard-content">

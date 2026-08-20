@@ -24,6 +24,8 @@ type BrokerState = {
   lamps: Record<number, LampState>;
   updatedAt: number | null;
   connected: boolean;
+  // "$logotime" que manda el LOGO: segundos desde 1970-01-01 (Unix timestamp).
+  logoTime: number | null;
 };
 
 function emptyLampState(): LampState {
@@ -34,6 +36,7 @@ const state: BrokerState = {
   lamps: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, emptyLampState()])),
   updatedAt: null,
   connected: false,
+  logoTime: null,
 };
 
 // El LOGO manda las horas como un entero decimal que, en hex, es "HHMM".
@@ -101,6 +104,10 @@ function getClient(): MqttClient {
           if (typeof autoValue === "number") lamp.mode = autoValue === 1 ? "AUTO" : "MAN";
           if (typeof fbValue === "number") lamp.isOn = fbValue === 1;
         }
+
+        const logoTimeValue = reported["$logotime"];
+        if (typeof logoTimeValue === "number") state.logoTime = logoTimeValue;
+
         state.updatedAt = Date.now();
       } catch (err) {
         console.error("[mqtt] payload inválido en", topic, err);
@@ -118,6 +125,7 @@ export function getLampsState(): BrokerState {
     lamps: Object.fromEntries(Object.entries(state.lamps).map(([id, lamp]) => [id, { ...lamp }])),
     updatedAt: state.updatedAt,
     connected: state.connected,
+    logoTime: state.logoTime,
   };
 }
 
