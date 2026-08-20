@@ -151,8 +151,9 @@ export function LampDashboard() {
     const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
     const { lampId, which } = editState;
 
-    // Publicamos al broker; la tarjeta se actualizará sola cuando el LOGO
-    // confirme el cambio en logo/planta1/status.
+    // El horario ya no se le manda al LOGO: se guarda en el servidor, que
+    // compara contra la hora del LOGO y publica TurnOn_N solo cuando toque
+    // encender/apagar. La tarjeta se actualiza sola vía FB_LampN.
     fetch("/api/lamps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
