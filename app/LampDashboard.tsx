@@ -28,6 +28,13 @@ const initialLamps: Lamp[] = schedules.map((schedule, index) => {
   return { id, mode: id === 14 ? "MAN" : "AUTO", onTime, offTime, isOn: activeLampIds.has(id) };
 });
 
+// Lámparas que ya tienen sus tags reales en el LOGO (Auto_N / FB_LampN /
+// TurnOn_N) y por eso se controlan de verdad. El resto se muestra
+// deshabilitada con "----" hasta que se le agreguen sus tags — solo hay que
+// sumar su número aquí cuando eso pase.
+const ACTIVE_LAMP_IDS = new Set([1, 2]);
+const PLACEHOLDER = "----";
+
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   const paths: Record<IconName, React.ReactNode> = {
@@ -134,9 +141,10 @@ export function LampDashboard() {
   }, []);
 
   const logoDateTime = logoTime !== null ? formatLogoDateTime(logoTime) : null;
-  const autoCount = lamps.filter((lamp) => lamp.mode === "AUTO").length;
-  const onCount = lamps.filter((lamp) => lamp.isOn).length;
-  const offCount = lamps.length - onCount;
+  const activeLamps = lamps.filter((lamp) => ACTIVE_LAMP_IDS.has(lamp.id));
+  const autoCount = activeLamps.filter((lamp) => lamp.mode === "AUTO").length;
+  const onCount = activeLamps.filter((lamp) => lamp.isOn).length;
+  const offCount = activeLamps.length - onCount;
   const systemStatus = connected === false ? "offline" : connected === null ? "pending" : "online";
 
   const openEdit = (lamp: Lamp, which: "on" | "off") => {
@@ -208,26 +216,29 @@ export function LampDashboard() {
           </div>
 
           <section className="lamp-board" aria-label="Control de lámparas">
-            {lamps.map((lamp) => <article className="sip-card" key={lamp.id}>
-              <div className="card-head">
-                <h3>LÁMPARA {lamp.id}</h3>
-                <button type="button" className={`power-toggle ${lamp.isOn ? "on" : ""}`} onClick={() => forcePower(lamp)} aria-label={`Forzar ${lamp.isOn ? "apagado" : "encendido"} de lámpara ${lamp.id}`}>
-                  <Icon name="power" size={15}/>
+            {lamps.map((lamp) => {
+              const active = ACTIVE_LAMP_IDS.has(lamp.id);
+              return <article className={`sip-card ${active ? "" : "disabled"}`} key={lamp.id}>
+                <div className="card-head">
+                  <h3>LÁMPARA {lamp.id}</h3>
+                  <button type="button" className={`power-toggle ${active && lamp.isOn ? "on" : ""}`} disabled={!active} onClick={() => forcePower(lamp)} aria-label={`Forzar ${lamp.isOn ? "apagado" : "encendido"} de lámpara ${lamp.id}`}>
+                    <Icon name="power" size={15}/>
+                  </button>
+                </div>
+                <button className={`lamp-status ${active && lamp.isOn ? "on" : ""}`} disabled type="button">
+                  <span className="status-icon"><Icon name="lamp" size={22}/></span>
+                  <span className="status-text">
+                    <b>{active ? (lamp.isOn ? "Encendida" : "Apagada") : PLACEHOLDER}</b>
+                    <small className="readonly">{active ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
+                  </span>
                 </button>
-              </div>
-              <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} disabled type="button">
-                <span className="status-icon"><Icon name="lamp" size={22}/></span>
-                <span className="status-text">
-                  <b>{lamp.isOn ? "Encendida" : "Apagada"}</b>
-                  <small className="readonly">Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>
-                </span>
-              </button>
-              <div className="schedule-row">
-                <button type="button" className="schedule-col" onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de lámpara ${lamp.id}`}><span className="label">Encendido</span><span className="value">{formatTime(lamp.onTime)}</span></button>
-                <span className="schedule-dot">•</span>
-                <button type="button" className="schedule-col" onClick={() => openEdit(lamp, "off")} aria-label={`Cambiar hora de apagado de lámpara ${lamp.id}`}><span className="label">Apagado</span><span className="value">{formatTime(lamp.offTime)}</span></button>
-              </div>
-            </article>)}
+                <div className="schedule-row">
+                  <button type="button" className="schedule-col" disabled={!active} onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de lámpara ${lamp.id}`}><span className="label">Encendido</span><span className="value">{active ? formatTime(lamp.onTime) : PLACEHOLDER}</span></button>
+                  <span className="schedule-dot">•</span>
+                  <button type="button" className="schedule-col" disabled={!active} onClick={() => openEdit(lamp, "off")} aria-label={`Cambiar hora de apagado de lámpara ${lamp.id}`}><span className="label">Apagado</span><span className="value">{active ? formatTime(lamp.offTime) : PLACEHOLDER}</span></button>
+                </div>
+              </article>;
+            })}
           </section>
         </section>
 

@@ -37,6 +37,11 @@ button { cursor:pointer; }
 .view-controls { display:flex; align-items:center; height:36px; }.view-controls button { display:grid; width:51px; height:36px; place-items:center; border:1px solid var(--line); color:#002957; background:#fff; }.view-controls button:first-of-type { border-radius:8px 0 0 8px; }.view-controls button:last-child { border-left:0; border-radius:0 8px 8px 0; }.view-controls button.selected { color:#066fff; background:#eaf2ff; }
 .lamp-board { display:grid; grid-template-columns:repeat(5,minmax(150px,1fr)); gap:10px; }
 .sip-card { display:flex; min-width:0; height:auto; min-height:190px; flex-direction:column; padding:18px 19px 17px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 2px 7px rgba(5,27,60,.025); }
+.sip-card.disabled { background:#fafbfc; box-shadow:none; }
+.sip-card.disabled .card-head h3,.sip-card.disabled .status-text b,.sip-card.disabled .schedule-col .value { color:#a7b0bd; }
+.sip-card.disabled .status-icon { color:#b7c0cc; background:#f1f3f5; }
+.sip-card.disabled .power-toggle,.sip-card.disabled .schedule-col { cursor:default; }
+.sip-card.disabled .schedule-col:hover .value { color:#a7b0bd; }
 .card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:15px; }
 .card-head h3 { margin:0; font-size:16px; font-weight:800; line-height:1.1; color:var(--ink); }
 .power-toggle { display:grid; flex:0 0 28px; width:28px; height:28px; place-items:center; border:1px solid var(--line); border-radius:50%; color:#8a95a8; background:#f4f6f9; }
