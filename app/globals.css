@@ -58,6 +58,12 @@ button { cursor:pointer; }
 .status-text small.readonly { cursor:default; }
 .status-text small.readonly:hover { color:#7c8798; text-decoration:none; }
 .lamp-status:disabled { cursor:default; }
+/* Forzado manual (botón de emergencia): color ámbar para distinguirlo del
+   verde/gris normal, sin importar si quedó encendido o apagado. */
+.lamp-status.forced .status-icon { color:#a15c00; background:#fff1d6; }
+.lamp-status.forced .status-text b { color:#a15c00; }
+.release-force { margin-top:8px; padding:0; border:0; background:transparent; color:#0874ff; font-size:11px; font-weight:700; text-align:left; text-decoration:underline; }
+.release-force:hover { color:#0456c9; }
 .schedule-row { display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:15px; border-top:1px solid var(--line); }
 .schedule-col { position:relative; display:flex; min-width:0; flex-direction:column; gap:3px; padding:0; border:0; background:transparent; text-align:left; cursor:pointer; }
 .schedule-col .label { color:#7c8798; font-size:11px; font-weight:650; }

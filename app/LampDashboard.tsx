@@ -12,6 +12,7 @@ type Lamp = {
   onTime: string;
   offTime: string;
   isOn: boolean;
+  forced: boolean;
 };
 
 const schedules = [
@@ -25,7 +26,7 @@ const activeLampIds = new Set([2, 4, 6, 8, 9, 12, 13, 15]);
 const initialLamps: Lamp[] = schedules.map((schedule, index) => {
   const [onTime, offTime] = schedule.split("|");
   const id = index + 1;
-  return { id, mode: id === 14 ? "MAN" : "AUTO", onTime, offTime, isOn: activeLampIds.has(id) };
+  return { id, mode: id === 14 ? "MAN" : "AUTO", onTime, offTime, isOn: activeLampIds.has(id), forced: false };
 });
 
 // Lámparas que ya tienen sus tags reales en el LOGO (Auto_N / FB_LampN /
@@ -128,6 +129,7 @@ export function LampDashboard() {
             offTime: reported.offTime ?? lamp.offTime,
             isOn: reported.isOn ?? lamp.isOn,
             mode: reported.mode ?? lamp.mode,
+            forced: reported.forced ?? lamp.forced,
           };
         }));
       } catch {
@@ -180,13 +182,23 @@ export function LampDashboard() {
   };
 
   const forcePower = (lamp: Lamp) => {
-    // Publicamos a la tag TurnOn_N para forzar el encendido/apagado. El
-    // ícono y la tarjeta se pondrán en verde/gris solos cuando el LOGO
-    // confirme el cambio real vía FB_LampN.
+    // Forzado de emergencia: publica TurnOn_N y saca la lámpara del control
+    // del horario hasta que se libere (ver releaseForce). El ícono y la
+    // tarjeta se pondrán en verde/gris solos cuando el LOGO confirme el
+    // cambio real vía FB_LampN.
     fetch("/api/lamps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lampId: lamp.id, power: lamp.isOn ? 0 : 1 }),
+    }).catch(() => {});
+  };
+
+  const releaseForce = (lamp: Lamp) => {
+    // Devuelve la lámpara al control del horario automático.
+    fetch("/api/lamps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lampId: lamp.id, release: true }),
     }).catch(() => {});
   };
 
@@ -225,13 +237,16 @@ export function LampDashboard() {
                     <Icon name="power" size={15}/>
                   </button>
                 </div>
-                <button className={`lamp-status ${active && lamp.isOn ? "on" : ""}`} disabled type="button">
+                <button className={`lamp-status ${active && lamp.isOn ? "on" : ""} ${active && lamp.forced ? "forced" : ""}`} disabled type="button">
                   <span className="status-icon"><Icon name="lamp" size={22}/></span>
                   <span className="status-text">
-                    <b>{active ? (lamp.isOn ? "Encendida" : "Apagada") : PLACEHOLDER}</b>
+                    <b>{active ? (lamp.forced ? `Señal ${lamp.isOn ? "Encendida" : "Apagada"} Forzada` : (lamp.isOn ? "Encendida" : "Apagada")) : PLACEHOLDER}</b>
                     <small className="readonly">{active ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
                   </span>
                 </button>
+                {active && lamp.forced && (
+                  <button type="button" className="release-force" onClick={() => releaseForce(lamp)}>Volver a horario automático</button>
+                )}
                 <div className="schedule-row">
                   <button type="button" className="schedule-col" disabled={!active} onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de lámpara ${lamp.id}`}><span className="label">Encendido</span><span className="value">{active ? formatTime(lamp.onTime) : PLACEHOLDER}</span></button>
                   <span className="schedule-dot">•</span>

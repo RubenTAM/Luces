@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLampsState, setLampPower, setLampSchedule } from "../../mqtt-client";
+import { getLampsState, releaseLampForce, setLampPower, setLampSchedule } from "../../mqtt-client";
 
 // Nunca cachear: siempre queremos el último estado reportado por el broker.
 export const dynamic = "force-dynamic";
@@ -16,9 +16,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  // Forzar encendido/apagado manual (tag TurnOn_N).
+  // Forzar encendido/apagado manual (tag TurnOn_N). Saca la lámpara del
+  // control del horario hasta que se libere.
   if (body.power === 0 || body.power === 1) {
     setLampPower(lampId, body.power === 1);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Liberar el forzado manual y devolver el control al horario automático.
+  if (body.release === true) {
+    releaseLampForce(lampId);
     return NextResponse.json({ ok: true });
   }
 

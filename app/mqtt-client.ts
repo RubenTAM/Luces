@@ -24,6 +24,9 @@ export type LampState = {
   offTime: string;
   isOn: boolean | null;
   mode: "AUTO" | "MAN" | null;
+  // true = alguien forzó el encendido/apagado desde el dashboard: el horario
+  // deja de tocar esta lámpara hasta que se libere el forzado.
+  forced: boolean;
 };
 
 type ReportedLampState = {
@@ -43,6 +46,9 @@ type InternalState = {
   // comando en cada mensaje de estado. null = todavía no sincronizado
   // (recién arrancó el servidor o la lámpara acaba de pasar a Automático).
   commandedOn: Record<number, boolean | null>;
+  // Lámparas puestas en forzado manual (botón de emergencia): mientras estén
+  // en true, evaluateSchedule las ignora por completo.
+  forced: Record<number, boolean>;
   updatedAt: number | null;
   connected: boolean;
   // "$logotime" que manda el LOGO: segundos desde 1970-01-01 (Unix timestamp),
@@ -56,6 +62,7 @@ const state: InternalState = {
   // valor guardado (retained) del broker: encendida de noche, apagada de día.
   schedule: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, { onTime: "18:00", offTime: "06:00" }])),
   commandedOn: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, null])),
+  forced: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, false])),
   updatedAt: null,
   connected: false,
   logoTime: null,
@@ -119,17 +126,22 @@ function loadPersistedSchedule(payload: Buffer) {
 
 // Compara la hora actual contra el horario guardado de una lámpara y, si
 // hace falta, publica TurnOn_N para alcanzarlo. Solo actúa si la lámpara
-// está en modo Automático (Auto_N=1) — en Manual no tocamos nada.
+// está en modo Automático (Auto_N=1) y no está en forzado manual — en
+// Manual, o forzada, el horario no la toca para nada.
 function evaluateSchedule(client: MqttClient, id: number) {
   const lamp = state.reported[id];
   const entry = state.schedule[id];
   if (!lamp || !entry) return;
 
   if (lamp.mode !== "AUTO") {
-    // Se resetea para que, al volver a Automático, se resincronice de una vez.
+    // Se resetea para que, al volver a Automático, se resincronice de una
+    // vez y se libere cualquier forzado que hubiera quedado pendiente.
     state.commandedOn[id] = null;
+    state.forced[id] = false;
     return;
   }
+
+  if (state.forced[id]) return; // forzado manual activo: el horario no manda aquí
 
   if (state.logoTime === null) return; // todavía no tenemos referencia de hora
 
@@ -230,6 +242,7 @@ export function getLampsState(): { lamps: Record<number, LampState>; updatedAt: 
       offTime: schedule.offTime,
       isOn: reported.isOn,
       mode: reported.mode,
+      forced: state.forced[id] ?? false,
     };
   }
 
@@ -256,12 +269,23 @@ export function setLampSchedule(id: number, which: "on" | "off", time: string): 
   evaluateSchedule(client, id);
 }
 
-// Fuerza el encendido/apagado manual de una lámpara (botón de la card). El
-// LOGO confirma el cambio real a través de FB_LampN en logo/planta1/status.
-// También actualiza commandedOn para que el horario no lo pise de inmediato:
-// solo lo corrige en la siguiente transición programada.
+// Fuerza el encendido/apagado manual de una lámpara (botón de emergencia de
+// la card). Esto saca a la lámpara del control del horario por completo
+// (state.forced=true) hasta que se libere con releaseLampForce — así el
+// horario ya no la "corrige" de vuelta unos segundos después. El LOGO
+// confirma el cambio real a través de FB_LampN en logo/planta1/status.
 export function setLampPower(id: number, on: boolean): void {
   const client = getClient();
+  state.forced[id] = true;
   state.commandedOn[id] = on;
   client.publish(CMD_TOPIC, buildPowerPayload(id, on), { qos: 0 });
+}
+
+// Libera el forzado manual y regresa el control de esa lámpara al horario.
+// Re-evalúa de inmediato para que, si ya toca otro estado, se aplique ya.
+export function releaseLampForce(id: number): void {
+  state.forced[id] = false;
+  state.commandedOn[id] = null;
+  const client = getClient();
+  evaluateSchedule(client, id);
 }
