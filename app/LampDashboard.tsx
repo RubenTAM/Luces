@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Mode = "AUTO" | "MAN";
 type IconName = "home" | "settings" | "history" | "headset" | "sun" | "calendar" | "clock" | "wifi" | "lamp" | "power" | "search" | "grid" | "list" | "check" | "refresh" | "chevron" | "hand" | "arrowUp" | "arrowDown" | "more";
@@ -67,6 +67,45 @@ export function LampDashboard() {
 
   const updateLamp = (id: number, updater: (lamp: Lamp) => Lamp) => setLamps((current) => current.map((lamp) => lamp.id === id ? updater(lamp) : lamp));
 
+  // LÁMPARA 1 está conectada de verdad al LOGO de Siemens vía MQTT. Las demás
+  // tarjetas siguen siendo datos de prueba hasta que se conecten sus propios horarios.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const response = await fetch("/api/lamp1", { cache: "no-store" });
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        setLamps((current) => current.map((lamp) => {
+          if (lamp.id !== 1) return lamp;
+          return {
+            ...lamp,
+            onTime: data.onTime ?? lamp.onTime,
+            offTime: data.offTime ?? lamp.offTime,
+          };
+        }));
+      } catch {
+        // sin conexión al servidor/broker: mantenemos el último valor conocido
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  const updateLampTime = (id: number, which: "on" | "off", time: string) => {
+    updateLamp(id, (item) => which === "on" ? { ...item, onTime: time } : { ...item, offTime: time });
+    if (id === 1) {
+      fetch("/api/lamp1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ which, time }),
+      }).catch(() => {});
+    }
+  };
+
   return <main className="sip-shell">
     <aside className="sip-sidebar" aria-label="Navegación principal">
       <div className="sip-logo-box"><Image className="sip-logo-image" src="/sip-logo-cropped.png" alt="SIP Sistemas Inteligentes del Pacífico" width={320} height={143} priority unoptimized/></div>
@@ -109,9 +148,9 @@ export function LampDashboard() {
                 </span>
               </button>
               <div className="schedule-row">
-                <label className="schedule-col"><span className="label">Encendido</span><span className="value">{formatTime(lamp.onTime)}</span><input aria-label={`Hora de encendido de lámpara ${lamp.id}`} type="time" value={lamp.onTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, onTime: event.target.value }))}/></label>
+                <label className="schedule-col"><span className="label">Encendido</span><span className="value">{formatTime(lamp.onTime)}</span><input aria-label={`Hora de encendido de lámpara ${lamp.id}`} type="time" value={lamp.onTime} onChange={(event) => updateLampTime(lamp.id, "on", event.target.value)}/></label>
                 <span className="schedule-dot">•</span>
-                <label className="schedule-col"><span className="label">Apagado</span><span className="value">{formatTime(lamp.offTime)}</span><input aria-label={`Hora de apagado de lámpara ${lamp.id}`} type="time" value={lamp.offTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, offTime: event.target.value }))}/></label>
+                <label className="schedule-col"><span className="label">Apagado</span><span className="value">{formatTime(lamp.offTime)}</span><input aria-label={`Hora de apagado de lámpara ${lamp.id}`} type="time" value={lamp.offTime} onChange={(event) => updateLampTime(lamp.id, "off", event.target.value)}/></label>
               </div>
             </article>)}
           </section>
