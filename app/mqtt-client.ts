@@ -8,16 +8,33 @@ const BROKER_PASSWORD = "123456789";
 const CMD_TOPIC = "logo/planta1/cmd";
 const STATUS_TOPIC = "logo/planta1/status";
 
-type Lamp1State = {
+// Total de lámparas que el LOGO puede reportar. Cada una tiene sus propias
+// tags: HoraOnN / HoraOffN (horarios), Auto_N (modo), FB_LampN (encendido real)
+// y TurnOn_N (forzar encendido/apagado manual).
+const LAMP_COUNT = 15;
+
+export type LampState = {
   onTime: string | null;
   offTime: string | null;
   isOn: boolean | null;
   mode: "AUTO" | "MAN" | null;
+};
+
+type BrokerState = {
+  lamps: Record<number, LampState>;
   updatedAt: number | null;
   connected: boolean;
 };
 
-const state: Lamp1State = { onTime: null, offTime: null, isOn: null, mode: null, updatedAt: null, connected: false };
+function emptyLampState(): LampState {
+  return { onTime: null, offTime: null, isOn: null, mode: null };
+}
+
+const state: BrokerState = {
+  lamps: Object.fromEntries(Array.from({ length: LAMP_COUNT }, (_, i) => [i + 1, emptyLampState()])),
+  updatedAt: null,
+  connected: false,
+};
 
 // El LOGO manda las horas como un entero decimal que, en hex, es "HHMM".
 // Ej: 10:00 -> 0x1000 -> 4096. 08:15 -> 0x0815 -> 2069.
@@ -72,14 +89,18 @@ function getClient(): MqttClient {
         const data = JSON.parse(payload.toString());
         const reported = data?.state?.reported;
         if (!reported) return;
-        const onValue = reported.HoraOn1?.value?.[0];
-        const offValue = reported.HoraOff1?.value?.[0];
-        const autoValue = reported.Auto_1?.value?.[0];
-        const fbValue = reported.FB_Lamp1?.value?.[0];
-        if (typeof onValue === "number") state.onTime = decodeHour(onValue);
-        if (typeof offValue === "number") state.offTime = decodeHour(offValue);
-        if (typeof autoValue === "number") state.mode = autoValue === 1 ? "AUTO" : "MAN";
-        if (typeof fbValue === "number") state.isOn = fbValue === 1;
+
+        for (let id = 1; id <= LAMP_COUNT; id++) {
+          const lamp = state.lamps[id];
+          const onValue = reported[`HoraOn${id}`]?.value?.[0];
+          const offValue = reported[`HoraOff${id}`]?.value?.[0];
+          const autoValue = reported[`Auto_${id}`]?.value?.[0];
+          const fbValue = reported[`FB_Lamp${id}`]?.value?.[0];
+          if (typeof onValue === "number") lamp.onTime = decodeHour(onValue);
+          if (typeof offValue === "number") lamp.offTime = decodeHour(offValue);
+          if (typeof autoValue === "number") lamp.mode = autoValue === 1 ? "AUTO" : "MAN";
+          if (typeof fbValue === "number") lamp.isOn = fbValue === 1;
+        }
         state.updatedAt = Date.now();
       } catch (err) {
         console.error("[mqtt] payload inválido en", topic, err);
@@ -91,23 +112,28 @@ function getClient(): MqttClient {
   return globalThis.__sipMqttClient;
 }
 
-export function getLamp1State(): Lamp1State {
+export function getLampsState(): BrokerState {
   getClient();
-  return { ...state };
+  return {
+    lamps: Object.fromEntries(Object.entries(state.lamps).map(([id, lamp]) => [id, { ...lamp }])),
+    updatedAt: state.updatedAt,
+    connected: state.connected,
+  };
 }
 
-export function setLamp1Time(which: "on" | "off", time: string): void {
+export function setLampTime(id: number, which: "on" | "off", time: string): void {
   const client = getClient();
-  const field = which === "on" ? "HoraOn1" : "HoraOff1";
+  const field = which === "on" ? `HoraOn${id}` : `HoraOff${id}`;
   const value = encodeHour(time);
   const payload = JSON.stringify({ state: { [field]: { value: [value] } } });
   client.publish(CMD_TOPIC, payload, { qos: 0 });
 }
 
-// Fuerza el encendido/apagado manual de la lámpara 1. El LOGO confirma el
-// cambio real a través de FB_Lamp1 en logo/planta1/status.
-export function setLamp1Power(on: boolean): void {
+// Fuerza el encendido/apagado manual de una lámpara. El LOGO confirma el
+// cambio real a través de FB_LampN en logo/planta1/status.
+export function setLampPower(id: number, on: boolean): void {
   const client = getClient();
-  const payload = JSON.stringify({ state: { TurnOn_1: { value: [on ? 1 : 0] } } });
+  const field = `TurnOn_${id}`;
+  const payload = JSON.stringify({ state: { [field]: { value: [on ? 1 : 0] } } });
   client.publish(CMD_TOPIC, payload, { qos: 0 });
 }

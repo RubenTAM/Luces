@@ -71,11 +71,6 @@ function formatClockTime(date: Date) {
   return `${hour.toString().padStart(2, "0")}:${minutes}:${seconds} ${suffix}`;
 }
 
-// Lámparas que ya están conectadas de verdad al LOGO y reportan sus propias
-// tags (Auto_N / FB_LampN). Solo estas cuentan en el resumen rápido; amplía
-// este set cuando más lámparas tengan tags reales del broker.
-const taggedLampIds = new Set([1]);
-
 type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: string };
 
 export function LampDashboard() {
@@ -84,29 +79,28 @@ export function LampDashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  const updateLamp = (id: number, updater: (lamp: Lamp) => Lamp) => setLamps((current) => current.map((lamp) => lamp.id === id ? updater(lamp) : lamp));
-
-  // LÁMPARA 1 está conectada de verdad al LOGO de Siemens vía MQTT. Las demás
-  // tarjetas siguen siendo datos de prueba hasta que se conecten sus propios horarios.
-  // El mismo polling nos dice si el servidor sigue conectado y escuchando el broker.
+  // Las 15 lámparas están conectadas al LOGO de Siemens vía MQTT: el estado
+  // de encendido y el modo ya no se manejan en la app, vienen del broker.
+  // El mismo polling nos dice si el servidor sigue conectado y escuchando.
   useEffect(() => {
     let cancelled = false;
 
     async function poll() {
       try {
-        const response = await fetch("/api/lamp1", { cache: "no-store" });
+        const response = await fetch("/api/lamps", { cache: "no-store" });
         if (!response.ok || cancelled) return;
         const data = await response.json();
         setConnected(Boolean(data.connected));
         setLastUpdated(new Date());
         setLamps((current) => current.map((lamp) => {
-          if (lamp.id !== 1) return lamp;
+          const reported = data.lamps?.[lamp.id];
+          if (!reported) return lamp;
           return {
             ...lamp,
-            onTime: data.onTime ?? lamp.onTime,
-            offTime: data.offTime ?? lamp.offTime,
-            isOn: data.isOn ?? lamp.isOn,
-            mode: data.mode ?? lamp.mode,
+            onTime: reported.onTime ?? lamp.onTime,
+            offTime: reported.offTime ?? lamp.offTime,
+            isOn: reported.isOn ?? lamp.isOn,
+            mode: reported.mode ?? lamp.mode,
           };
         }));
       } catch {
@@ -119,10 +113,9 @@ export function LampDashboard() {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  const trackedLamps = lamps.filter((lamp) => taggedLampIds.has(lamp.id));
-  const autoCount = trackedLamps.filter((lamp) => lamp.mode === "AUTO").length;
-  const onCount = trackedLamps.filter((lamp) => lamp.isOn).length;
-  const offCount = trackedLamps.length - onCount;
+  const autoCount = lamps.filter((lamp) => lamp.mode === "AUTO").length;
+  const onCount = lamps.filter((lamp) => lamp.isOn).length;
+  const offCount = lamps.length - onCount;
   const systemStatus = connected === false ? "offline" : connected === null ? "pending" : "online";
 
   const openEdit = (lamp: Lamp, which: "on" | "off") => {
@@ -137,34 +130,26 @@ export function LampDashboard() {
     const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
     const { lampId, which } = editState;
 
-    if (lampId === 1) {
-      // Lámpara real: publicamos al broker; la tarjeta se actualizará sola
-      // cuando el LOGO confirme el cambio en logo/planta1/status.
-      fetch("/api/lamp1", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ which, time }),
-      }).catch(() => {});
-    } else {
-      updateLamp(lampId, (item) => which === "on" ? { ...item, onTime: time } : { ...item, offTime: time });
-    }
+    // Publicamos al broker; la tarjeta se actualizará sola cuando el LOGO
+    // confirme el cambio en logo/planta1/status.
+    fetch("/api/lamps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lampId, which, time }),
+    }).catch(() => {});
 
     setEditState(null);
   };
 
   const forcePower = (lamp: Lamp) => {
-    if (lamp.id === 1) {
-      // Lámpara real: publicamos a la tag TurnOn_1 para forzar el encendido.
-      // El ícono y la tarjeta se pondrán en verde/gris solos cuando el LOGO
-      // confirme el cambio real vía FB_Lamp1.
-      fetch("/api/lamp1", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ power: lamp.isOn ? 0 : 1 }),
-      }).catch(() => {});
-    } else {
-      updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }));
-    }
+    // Publicamos a la tag TurnOn_N para forzar el encendido/apagado. El
+    // ícono y la tarjeta se pondrán en verde/gris solos cuando el LOGO
+    // confirme el cambio real vía FB_LampN.
+    fetch("/api/lamps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lampId: lamp.id, power: lamp.isOn ? 0 : 1 }),
+    }).catch(() => {});
   };
 
   return <main className="sip-shell">
@@ -200,13 +185,11 @@ export function LampDashboard() {
                   <Icon name="power" size={15}/>
                 </button>
               </div>
-              <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} disabled={lamp.id === 1} onClick={lamp.id === 1 ? undefined : () => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={lamp.id === 1 ? undefined : `${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}>
+              <button className={`lamp-status ${lamp.isOn ? "on" : ""}`} disabled type="button">
                 <span className="status-icon"><Icon name="lamp" size={22}/></span>
                 <span className="status-text">
                   <b>{lamp.isOn ? "Encendida" : "Apagada"}</b>
-                  {lamp.id === 1
-                    ? <small className="readonly">Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>
-                    : <small onClick={(event) => { event.stopPropagation(); updateLamp(lamp.id, item => ({ ...item, mode: item.mode === "AUTO" ? "MAN" : "AUTO" })); }} role="button" aria-label={`Cambiar modo de lámpara ${lamp.id}`}>Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>}
+                  <small className="readonly">Modo: {lamp.mode === "AUTO" ? "Automático" : "Manual"}</small>
                 </span>
               </button>
               <div className="schedule-row">
@@ -226,7 +209,7 @@ export function LampDashboard() {
             <div className="updated"><span>Última actualización: {lastUpdated ? formatClockTime(lastUpdated) : "—"}</span><button type="button" aria-label="Actualizar" onClick={() => window.location.reload()}><Icon name="refresh" size={17}/></button></div>
           </section>
           <section className="rail-card quick"><h2>Resumen rápido</h2><ul><li><span className="blue"><Icon name="lamp"/>Total de lámparas en automático</span><b>{autoCount}</b></li><li><span className="green-text"><Icon name="power"/>Encendidas</span><b>{onCount}</b></li><li><span className="gray-text"><Icon name="power"/>Apagadas</span><b>{offCount}</b></li></ul></section>
-          <section className="rail-card activity"><h2>Actividad reciente</h2><ul><li><i className="up"><Icon name="arrowUp"/></i><span>LÁMPARA 8 encendida</span><time>10:15 a.m.</time></li><li><i><Icon name="arrowDown"/></i><span>LÁMPARA 3 apagada</span><time>10:00 a.m.</time></li><li><i className="hand"><Icon name="hand"/></i><span>LÁMPARA 14 modo manual</span><time>09:45 a.m.</time></li><li><i className="up"><Icon name="arrowUp"/></i><span>LÁMPARA 1 encendida</span><time>09:30 a.m.</time></li><li><i><Icon name="arrowDown"/></i><span>LÁMPARA 6 apagada</span><time>09:15 a.m.</time></li></ul><a href="#historial">Ver historial completo <Icon name="chevron" size={16}/></a></section>
+          <section className="rail-card activity"><h2>Actividad reciente</h2><p className="activity-empty">Aún no hay actividad registrada.</p><a href="#historial">Ver historial completo <Icon name="chevron" size={16}/></a></section>
         </aside>
       </div>
     </section>
