@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type Mode = "AUTO" | "MAN";
 type IconName = "home" | "settings" | "history" | "headset" | "sun" | "calendar" | "clock" | "wifi" | "lamp" | "power" | "search" | "grid" | "list" | "check" | "refresh" | "chevron" | "hand" | "arrowUp" | "arrowDown" | "more";
@@ -64,8 +64,6 @@ function formatTime(value: string) {
 
 export function LampDashboard() {
   const [lamps, setLamps] = useState<Lamp[]>(initialLamps);
-  const [query, setQuery] = useState("");
-  const filteredLamps = useMemo(() => lamps.filter((lamp) => `lampara ${lamp.id}`.includes(query.trim().toLowerCase().replace("á", "a"))), [lamps, query]);
 
   const updateLamp = (id: number, updater: (lamp: Lamp) => Lamp) => setLamps((current) => current.map((lamp) => lamp.id === id ? updater(lamp) : lamp));
 
@@ -98,12 +96,12 @@ export function LampDashboard() {
 
           <div className="controls-heading">
             <h2><span/>Control individual</h2>
-            <div className="view-controls"><label><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar lámpara..."/><Icon name="search"/></label><button className="selected" type="button" aria-label="Vista de cuadrícula"><Icon name="grid"/></button><button type="button" aria-label="Vista de lista"><Icon name="list"/></button></div>
+            <div className="view-controls"><button className="selected" type="button" aria-label="Vista de cuadrícula"><Icon name="grid"/></button><button type="button" aria-label="Vista de lista"><Icon name="list"/></button></div>
           </div>
 
           <section className="lamp-board" aria-label="Control de lámparas">
-            {filteredLamps.map((lamp) => <article className="sip-card" key={lamp.id}>
-              <div className="card-head"><div><strong>{String(lamp.id).padStart(2, "0")}</strong><h3>LÁMPARA {lamp.id}</h3></div><div><button className="more" type="button" aria-label={`Opciones de lámpara ${lamp.id}`}><Icon name="more" size={17}/></button><span>En línea</span></div></div>
+            {lamps.map((lamp) => <article className="sip-card" key={lamp.id}>
+              <div className="card-head"><h3>LÁMPARA {lamp.id}</h3></div>
               <button className={`lamp-state ${lamp.isOn ? "on" : ""}`} onClick={() => updateLamp(lamp.id, (item) => ({ ...item, isOn: !item.isOn }))} type="button" aria-label={`${lamp.isOn ? "Apagar" : "Encender"} lámpara ${lamp.id}`}><Icon name="lamp" size={27}/></button>
               <div className="mode-toggle" role="group" aria-label={`Modo de lámpara ${lamp.id}`}><button className={lamp.mode === "AUTO" ? "active" : ""} onClick={() => updateLamp(lamp.id, item => ({ ...item, mode: "AUTO" }))} type="button">AUTO</button><button className={lamp.mode === "MAN" ? "active" : ""} onClick={() => updateLamp(lamp.id, item => ({ ...item, mode: "MAN" }))} type="button">MAN</button></div>
               <div className="schedule-box"><label><span><i className="off-dot"/>Apagado</span><input aria-label={`Hora de apagado de lámpara ${lamp.id}`} type="time" value={lamp.offTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, offTime: event.target.value }))}/><b>{formatTime(lamp.offTime)}</b></label><label><span><i/>Encendido</span><input aria-label={`Hora de encendido de lámpara ${lamp.id}`} type="time" value={lamp.onTime} onChange={(event) => updateLamp(lamp.id, item => ({ ...item, onTime: event.target.value }))}/><b>{formatTime(lamp.onTime)}</b></label></div>
