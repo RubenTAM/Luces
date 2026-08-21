@@ -8,6 +8,10 @@ import { sql } from "drizzle-orm";
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
+  // Nombre para mostrar (avatar/tabla de Configuración). Nullable porque los
+  // usuarios creados antes de este campo no lo tienen — la UI cae de
+  // regreso a la parte del correo antes de la @ si viene vacío.
+  name: text("name"),
   passwordHash: text("password_hash").notNull(),
   // "admin" ve y edita Configuración (usuarios y lámparas). "soporte" opera
   // el dashboard igual que admin, pero no entra a Configuración.

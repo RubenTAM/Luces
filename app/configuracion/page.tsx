@@ -15,7 +15,7 @@ export default async function ConfiguracionPage() {
 
   const [userList, lampList] = await Promise.all([
     db
-      .select({ id: users.id, email: users.email, role: users.role, createdAt: users.createdAt })
+      .select({ id: users.id, email: users.email, name: users.name, role: users.role, createdAt: users.createdAt })
       .from(users)
       .orderBy(asc(users.id)),
     db.select().from(lamps).orderBy(asc(lamps.position)),

@@ -17,7 +17,7 @@ export async function GET() {
   }
   const db = getDb();
   const list = await db
-    .select({ id: users.id, email: users.email, role: users.role, createdAt: users.createdAt })
+    .select({ id: users.id, email: users.email, name: users.name, role: users.role, createdAt: users.createdAt })
     .from(users)
     .orderBy(asc(users.id));
   return NextResponse.json({ users: list });
@@ -28,17 +28,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Solo un admin puede hacer esto." }, { status: 403 });
   }
 
-  let body: { email?: string; password?: string; role?: string };
+  let body: { name?: string; email?: string; password?: string; role?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Solicitud inválida." }, { status: 400 });
   }
 
+  const name = body.name?.trim();
   const email = body.email?.trim().toLowerCase();
   const password = body.password;
   const role = body.role;
 
+  if (!name) {
+    return NextResponse.json({ error: "El nombre es obligatorio." }, { status: 400 });
+  }
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "El correo no es válido." }, { status: 400 });
   }
@@ -55,8 +59,8 @@ export async function POST(request: NextRequest) {
   try {
     const [created] = await db
       .insert(users)
-      .values({ email, passwordHash, role })
-      .returning({ id: users.id, email: users.email, role: users.role, createdAt: users.createdAt });
+      .values({ name, email, passwordHash, role })
+      .returning({ id: users.id, email: users.email, name: users.name, role: users.role, createdAt: users.createdAt });
     return NextResponse.json({ user: created }, { status: 201 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
