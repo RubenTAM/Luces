@@ -372,6 +372,8 @@ function getClient(): MqttClient {
 
 export async function getLampsState(): Promise<{
   lamps: Record<number, LampState>;
+  devices: Array<{ id: number; name: string; plcId: number | null }>;
+  plcs: Array<{ id: number; name: string }>;
   updatedAt: number | null;
   connected: boolean;
   logoTime: number | null;
@@ -394,8 +396,21 @@ export async function getLampsState(): Promise<{
     };
   }
 
+  // "devices" y "plcs" le dicen al Dashboard qué lámparas existen (con su
+  // nombre y a cuál PLC pertenecen) y cómo se llama cada PLC — así el
+  // Dashboard ya no trae una lista fija de 15 lámparas escrita en el
+  // frontend: agregar/renombrar/quitar algo en Configuración se refleja
+  // solo aquí, agrupado bajo el nombre de PLC que se le puso ahí.
+  const devices = cfg.lamps
+    .slice()
+    .sort((a, b) => a.id - b.id)
+    .map((lamp) => ({ id: lamp.id, name: lamp.name, plcId: lamp.plcId }));
+  const plcs = cfg.plcs.map((plc) => ({ id: plc.id, name: plc.name }));
+
   return {
     lamps,
+    devices,
+    plcs,
     updatedAt: state.updatedAt,
     // "Conectado" = tenemos sesión con el broker Y al menos un LOGO nos ha
     // escrito datos en el último minuto. Si dejan de mandar, se marca

@@ -7,34 +7,24 @@ import { useEffect, useState } from "react";
 type Mode = "AUTO" | "MAN";
 type IconName = "home" | "settings" | "history" | "headset" | "sun" | "calendar" | "clock" | "wifi" | "lamp" | "power" | "search" | "grid" | "list" | "check" | "refresh" | "chevron" | "hand" | "arrowUp" | "arrowDown" | "more" | "close";
 
+// Ya no hay una lista fija de 15 lámparas escrita en el código: las
+// lámparas (su número, nombre y a cuál PLC pertenecen) se dan de alta en
+// Configuración, y aquí se leen del servidor en cada poll — así que agregar,
+// renombrar o quitar una lámpara en Configuración se refleja solo aquí,
+// agrupada bajo el nombre del PLC al que pertenece.
 type Lamp = {
   id: number;
-  mode: Mode;
+  name: string;
+  plcId: number | null;
+  mode: Mode | null;
   onTime: string;
   offTime: string;
-  isOn: boolean;
+  isOn: boolean | null;
   forced: boolean;
 };
 
-const schedules = [
-  "06:00|18:00", "06:15|18:15", "06:30|18:30", "07:00|19:00", "07:15|19:15",
-  "07:30|19:30", "08:00|20:00", "08:15|20:15", "08:30|20:30", "09:00|21:00",
-  "09:15|21:15", "09:30|21:30", "10:00|22:00", "10:15|22:15", "10:30|22:30",
-];
+type PlcMeta = { id: number; name: string };
 
-const activeLampIds = new Set([2, 4, 6, 8, 9, 12, 13, 15]);
-
-const initialLamps: Lamp[] = schedules.map((schedule, index) => {
-  const [onTime, offTime] = schedule.split("|");
-  const id = index + 1;
-  return { id, mode: id === 14 ? "MAN" : "AUTO", onTime, offTime, isOn: activeLampIds.has(id), forced: false };
-});
-
-// Lámparas que ya tienen sus tags reales en el LOGO (Auto_N / FB_LampN /
-// TurnOn_N) y por eso se controlan de verdad. El resto se muestra
-// deshabilitada con "----" hasta que se le agreguen sus tags — solo hay que
-// sumar su número aquí cuando eso pase.
-const ACTIVE_LAMP_IDS = new Set([1, 2]);
 const PLACEHOLDER = "----";
 
 function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
@@ -102,15 +92,20 @@ type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: st
 
 export function LampDashboard() {
   const router = useRouter();
-  const [lamps, setLamps] = useState<Lamp[]>(initialLamps);
+  const [lamps, setLamps] = useState<Lamp[]>([]);
+  const [plcs, setPlcs] = useState<PlcMeta[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [logoTime, setLogoTime] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  // Las 15 lámparas están conectadas al LOGO de Siemens vía MQTT: el estado
-  // de encendido y el modo ya no se manejan en la app, vienen del broker.
-  // El mismo polling nos dice si el servidor sigue conectado y escuchando.
+  // Las lámparas están conectadas a uno o más LOGO de Siemens vía MQTT: el
+  // estado de encendido y el modo ya no se manejan en la app, vienen del
+  // broker. El mismo polling nos dice si el servidor sigue conectado y
+  // escuchando, y de paso trae la lista de lámparas/PLCs tal como están
+  // configuradas ahorita (así que un cambio en Configuración se refleja
+  // aquí solo, sin tener que tocar código).
   useEffect(() => {
     let cancelled = false;
 
@@ -122,20 +117,29 @@ export function LampDashboard() {
         setConnected(Boolean(data.connected));
         setLastUpdated(new Date());
         if (typeof data.logoTime === "number") setLogoTime(data.logoTime);
-        setLamps((current) => current.map((lamp) => {
-          const reported = data.lamps?.[lamp.id];
-          if (!reported) return lamp;
-          return {
-            ...lamp,
-            onTime: reported.onTime ?? lamp.onTime,
-            offTime: reported.offTime ?? lamp.offTime,
-            isOn: reported.isOn ?? lamp.isOn,
-            mode: reported.mode ?? lamp.mode,
-            forced: reported.forced ?? lamp.forced,
-          };
-        }));
+
+        const devices: Array<{ id: number; name: string; plcId: number | null }> = data.devices ?? [];
+        setLamps(
+          devices.map((device) => {
+            const reported = data.lamps?.[device.id];
+            return {
+              id: device.id,
+              name: device.name,
+              plcId: device.plcId,
+              onTime: reported?.onTime ?? "18:00",
+              offTime: reported?.offTime ?? "06:00",
+              isOn: reported?.isOn ?? null,
+              mode: reported?.mode ?? null,
+              forced: reported?.forced ?? false,
+            };
+          })
+        );
+        setPlcs(data.plcs ?? []);
+        setLoaded(true);
       } catch {
         if (!cancelled) setConnected(false);
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     }
 
@@ -145,11 +149,22 @@ export function LampDashboard() {
   }, []);
 
   const logoDateTime = logoTime !== null ? formatLogoDateTime(logoTime) : null;
-  const activeLamps = lamps.filter((lamp) => ACTIVE_LAMP_IDS.has(lamp.id));
-  const autoCount = activeLamps.filter((lamp) => lamp.mode === "AUTO").length;
-  const onCount = activeLamps.filter((lamp) => lamp.isOn).length;
-  const offCount = activeLamps.length - onCount;
+  const autoCount = lamps.filter((lamp) => lamp.mode === "AUTO").length;
+  const onCount = lamps.filter((lamp) => lamp.isOn).length;
+  const offCount = lamps.filter((lamp) => lamp.mode !== null).length - onCount;
   const systemStatus = connected === false ? "offline" : connected === null ? "pending" : "online";
+
+  // Agrupa las lámparas por PLC, en el mismo orden en que vienen los PLCs
+  // del servidor, para poner un encabezado con el nombre de cada PLC (el
+  // que se le puso en Configuración) arriba de sus lámparas. Una lámpara
+  // que se quedó sin PLC asignado cae en un grupo aparte, por si acaso.
+  const groupedByPlc = plcs
+    .map((plc) => ({ plc, items: lamps.filter((lamp) => lamp.plcId === plc.id) }))
+    .filter((group) => group.items.length > 0);
+  const orphanLamps = lamps.filter((lamp) => !plcs.some((plc) => plc.id === lamp.plcId));
+  if (orphanLamps.length > 0) {
+    groupedByPlc.push({ plc: { id: -1, name: "Sin PLC asignado" }, items: orphanLamps });
+  }
 
   const openEdit = (lamp: Lamp, which: "on" | "off") => {
     const [hour, minute] = (which === "on" ? lamp.onTime : lamp.offTime).split(":");
@@ -220,30 +235,40 @@ export function LampDashboard() {
             <div className="view-controls"><button className="selected" type="button" aria-label="Vista de cuadrícula"><Icon name="grid"/></button><button type="button" aria-label="Vista de lista"><Icon name="list"/></button></div>
           </div>
 
-          <section className="lamp-board" aria-label="Control de lámparas">
-            {lamps.map((lamp) => {
-              const active = ACTIVE_LAMP_IDS.has(lamp.id);
-              return <article className={`sip-card ${active ? "" : "disabled"}`} key={lamp.id}>
-                <div className="card-head">
-                  <h3>LÁMPARA {lamp.id}</h3>
-                  <button type="button" className={`power-toggle ${active && lamp.isOn ? "on" : ""}`} disabled={!active} onClick={() => forcePower(lamp)} aria-label={`Forzar ${lamp.isOn ? "apagado" : "encendido"} de lámpara ${lamp.id}`}>
-                    <Icon name="power" size={15}/>
-                  </button>
+          <section className="lamp-groups" aria-label="Control de lámparas">
+            {groupedByPlc.map((group) => (
+              <div className="plc-group" key={group.plc.id}>
+                <h3 className="plc-group-heading">{group.plc.name}</h3>
+                <div className="lamp-board">
+                  {group.items.map((lamp) => {
+                    const hasData = lamp.mode !== null;
+                    return <article className={`sip-card ${hasData ? "" : "disabled"}`} key={lamp.id}>
+                      <div className="card-head">
+                        <h3>{lamp.name}</h3>
+                        <button type="button" className={`power-toggle ${hasData && lamp.isOn ? "on" : ""}`} disabled={!hasData} onClick={() => forcePower(lamp)} aria-label={`Forzar ${lamp.isOn ? "apagado" : "encendido"} de ${lamp.name}`}>
+                          <Icon name="power" size={15}/>
+                        </button>
+                      </div>
+                      <button className={`lamp-status ${hasData && lamp.isOn ? "on" : ""} ${hasData && lamp.forced ? "forced" : ""}`} disabled type="button">
+                        <span className="status-icon"><Icon name="lamp" size={22}/></span>
+                        <span className="status-text">
+                          <b>{hasData ? (lamp.forced ? `Señal ${lamp.isOn ? "Encendida" : "Apagada"} Forzada` : (lamp.isOn ? "Encendida" : "Apagada")) : PLACEHOLDER}</b>
+                          <small className="readonly">{hasData ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
+                        </span>
+                      </button>
+                      <div className="schedule-row">
+                        <button type="button" className="schedule-col" disabled={!hasData} onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de ${lamp.name}`}><span className="label">Encendido</span><span className="value">{hasData ? formatTime(lamp.onTime) : PLACEHOLDER}</span></button>
+                        <span className="schedule-dot">•</span>
+                        <button type="button" className="schedule-col" disabled={!hasData} onClick={() => openEdit(lamp, "off")} aria-label={`Cambiar hora de apagado de ${lamp.name}`}><span className="label">Apagado</span><span className="value">{hasData ? formatTime(lamp.offTime) : PLACEHOLDER}</span></button>
+                      </div>
+                    </article>;
+                  })}
                 </div>
-                <button className={`lamp-status ${active && lamp.isOn ? "on" : ""} ${active && lamp.forced ? "forced" : ""}`} disabled type="button">
-                  <span className="status-icon"><Icon name="lamp" size={22}/></span>
-                  <span className="status-text">
-                    <b>{active ? (lamp.forced ? `Señal ${lamp.isOn ? "Encendida" : "Apagada"} Forzada` : (lamp.isOn ? "Encendida" : "Apagada")) : PLACEHOLDER}</b>
-                    <small className="readonly">{active ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
-                  </span>
-                </button>
-                <div className="schedule-row">
-                  <button type="button" className="schedule-col" disabled={!active} onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de lámpara ${lamp.id}`}><span className="label">Encendido</span><span className="value">{active ? formatTime(lamp.onTime) : PLACEHOLDER}</span></button>
-                  <span className="schedule-dot">•</span>
-                  <button type="button" className="schedule-col" disabled={!active} onClick={() => openEdit(lamp, "off")} aria-label={`Cambiar hora de apagado de lámpara ${lamp.id}`}><span className="label">Apagado</span><span className="value">{active ? formatTime(lamp.offTime) : PLACEHOLDER}</span></button>
-                </div>
-              </article>;
-            })}
+              </div>
+            ))}
+            {loaded && groupedByPlc.length === 0 && (
+              <p className="lamp-board-empty">No hay lámparas configuradas todavía. Agrégalas en Configuración.</p>
+            )}
           </section>
         </section>
 
@@ -264,7 +289,7 @@ export function LampDashboard() {
       <div className="modal-backdrop" onClick={() => setEditState(null)}>
         <div className="modal-box" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
           <div className="modal-head">
-            <h3>Hora de {editState.which === "on" ? "encendido" : "apagado"} — LÁMPARA {editState.lampId}</h3>
+            <h3>Hora de {editState.which === "on" ? "encendido" : "apagado"} — {lamps.find((lamp) => lamp.id === editState.lampId)?.name ?? `Lámpara ${editState.lampId}`}</h3>
             <button type="button" className="modal-close" onClick={() => setEditState(null)} aria-label="Cerrar"><Icon name="close" size={15}/></button>
           </div>
           <div className="modal-body">
