@@ -1,6 +1,6 @@
 import { connect, type MqttClient } from "mqtt";
 import { getDb } from "../db";
-import { lamps as lampsTable, plcs as plcsTable } from "../db/schema";
+import { lamps as lampsTable, plcs as plcsTable, lampEvents } from "../db/schema";
 
 // Broker real de HiveMQ Cloud donde están conectados los LOGO de Siemens.
 const BROKER_URL = "mqtts://c56dc92e5c454d4a808083fe2db4874d.s1.eu.hivemq.cloud:8883";
@@ -154,6 +154,19 @@ function isWithinSchedule(logoTimeSeconds: number, entry: ScheduleEntry): boolea
 
 function buildPowerPayload(tagCommand: string, on: boolean): string {
   return JSON.stringify({ state: { [tagCommand]: { value: [on ? 1 : 0] } } });
+}
+
+// Guarda un renglón en la bitácora que alimenta la pantalla de Historial.
+// Es "best effort" a propósito: si la base de datos falla un instante no
+// se debe caer el servidor de MQTT por eso — nomás se registra el error en
+// consola y se sigue. "lampName" se guarda tal cual está en este momento,
+// como una copia (no una referencia), para que un cambio de nombre después
+// en Configuración no reescriba el historial ya guardado.
+function recordEvent(lampId: number | null, lampName: string, message: string) {
+  const db = getDb();
+  Promise.resolve(db.insert(lampEvents).values({ lampId, lampName, message })).catch((err) => {
+    console.error("[historial] no se pudo guardar el evento:", err);
+  });
 }
 
 // Publica el horario completo como mensaje retained en SCHEDULE_TOPIC, para
@@ -343,10 +356,28 @@ function getClient(): MqttClient {
 
         for (const lamp of lampsOnThisPlc) {
           ensureLampDefaults(lamp.id);
+          const prevMode = state.reported[lamp.id].mode;
+          const prevIsOn = state.reported[lamp.id].isOn;
           const autoValue = reported[lamp.tagMode]?.value?.[0];
           const fbValue = reported[lamp.tagStatus]?.value?.[0];
-          if (typeof autoValue === "number") state.reported[lamp.id].mode = autoValue === 1 ? "AUTO" : "MAN";
-          if (typeof fbValue === "number") state.reported[lamp.id].isOn = fbValue === 1;
+          const newMode: "AUTO" | "MAN" | null =
+            typeof autoValue === "number" ? (autoValue === 1 ? "AUTO" : "MAN") : prevMode;
+          const newIsOn: boolean | null = typeof fbValue === "number" ? fbValue === 1 : prevIsOn;
+
+          // Solo se registra en el Historial un cambio REAL de estado, no el
+          // primer dato que llega al arrancar el servidor (cuando el valor
+          // anterior todavía es null) — si no, cada reinicio del servidor
+          // generaría un evento falso de "encendida"/"cambió de modo".
+          if (newMode !== prevMode && prevMode !== null) {
+            recordEvent(lamp.id, lamp.name, `Cambió a modo ${newMode === "AUTO" ? "Automático" : "Manual"}`);
+          }
+          if (newIsOn !== prevIsOn && prevIsOn !== null) {
+            const forcedNote = state.forced[lamp.id] ? " (forzado manual)" : "";
+            recordEvent(lamp.id, lamp.name, `${newIsOn ? "Encendida" : "Apagada"}${forcedNote}`);
+          }
+
+          state.reported[lamp.id].mode = newMode;
+          state.reported[lamp.id].isOn = newIsOn;
         }
 
         const logoTimeValue = reported["$logotime"];
@@ -453,6 +484,7 @@ export async function setLampPower(id: number, on: boolean): Promise<void> {
   state.forced[id] = true;
   state.commandedOn[id] = on;
   client.publish(plc.cmdTopic, buildPowerPayload(lamp.tagCommand, on), { qos: 0 });
+  recordEvent(id, lamp.name, `Forzado manual: ${on ? "encender" : "apagar"}`);
 }
 
 // Libera el forzado manual y regresa el control de esa lámpara al horario.
@@ -464,5 +496,8 @@ export async function releaseLampForce(id: number): Promise<void> {
   const client = getClient();
   const cfg = await getConfig();
   const lamp = findLampByPosition(cfg, id);
-  if (lamp) evaluateSchedule(client, lamp, findPlc(cfg, lamp.plcId));
+  if (lamp) {
+    evaluateSchedule(client, lamp, findPlc(cfg, lamp.plcId));
+    recordEvent(id, lamp.name, "Se liberó el forzado manual, vuelve a control por horario");
+  }
 }

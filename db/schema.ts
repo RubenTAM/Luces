@@ -55,9 +55,26 @@ export const lamps = pgTable("lamps", {
     .$onUpdate(() => sql`now()`),
 });
 
+// Bitácora de eventos para la pantalla de Historial: un renglón por cada
+// cambio real de una lámpara (se prendió, se apagó, cambió de modo, se
+// forzó/liberó manualmente). "lampName" guarda el nombre tal como se
+// llamaba la lámpara EN ESE MOMENTO (una copia, no una referencia) — así
+// que si después la renombran o la eliminan, el historial viejo no cambia
+// ni desaparece. "lampId" sí es una referencia real, nullable y con
+// "set null" en vez de borrar el historial si se elimina la lámpara.
+export const lampEvents = pgTable("lamp_events", {
+  id: serial("id").primaryKey(),
+  lampId: integer("lamp_id").references(() => lamps.id, { onDelete: "set null" }),
+  lampName: text("lamp_name").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Plc = typeof plcs.$inferSelect;
 export type NewPlc = typeof plcs.$inferInsert;
 export type Lamp = typeof lamps.$inferSelect;
 export type NewLamp = typeof lamps.$inferInsert;
+export type LampEvent = typeof lampEvents.$inferSelect;
+export type NewLampEvent = typeof lampEvents.$inferInsert;

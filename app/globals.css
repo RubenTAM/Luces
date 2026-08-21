@@ -181,3 +181,22 @@ button { cursor:pointer; }
 .user-avatar { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#0874ff,#003166); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
 .user-name { font-weight:700; font-size:13px; color:var(--ink); }
 .user-email { font-size:11.5px; color:#7c8798; }
+
+/* --- Historial --- */
+.btn-icon { display:grid; width:38px; height:38px; place-items:center; border:1px solid var(--line); border-radius:8px; background:#fff; color:#0b3768; flex-shrink:0; }
+.btn-icon:hover { background:#f6f9fd; }
+.historial-filters { display:flex; flex-wrap:wrap; align-items:end; gap:12px; padding:16px 20px; background:#fafbfc; border-bottom:1px solid var(--line); }
+.historial-filters label { display:grid; gap:5px; font-size:10.5px; font-weight:650; color:#7c8798; text-transform:uppercase; letter-spacing:.3px; }
+.historial-filters input, .historial-filters select { padding:8px 10px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); font-size:12.5px; min-height:36px; }
+.historial-filters input:focus, .historial-filters select:focus { border-color:#0874ff; outline:2px solid rgba(8,116,255,.18); }
+.historial-search-btn { display:flex; align-items:center; gap:8px; height:36px; white-space:nowrap; }
+.historial-table th:nth-child(3), .historial-table td.historial-date { white-space:nowrap; }
+.historial-lamp-name { font-weight:800; font-size:12.5px; color:var(--ink); white-space:nowrap; }
+.historial-date { color:#4e6080; font-size:12.5px; }
+.historial-tag { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:650; color:var(--ink); background:#eef1f5; }
+.historial-tag.on { color:#00984a; background:#e8f7ef; }
+.historial-tag.off { color:#4e6080; background:#eef1f5; }
+.historial-tag.mode { color:#0058c9; background:#e6f0ff; }
+.historial-tag.force { color:#b5690a; background:#fdf0dd; }
+.historial-note { margin:0; padding:10px 20px 18px; color:#7c8798; font-size:12px; }
+@media (max-width:720px) { .historial-filters { flex-direction:column; align-items:stretch; } }

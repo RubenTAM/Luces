@@ -1,8 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { useState } from "react";
+import { Sidebar } from "../Sidebar";
 
 type UserRow = { id: number; email: string; name: string | null; role: "admin" | "soporte"; createdAt: string | Date };
 type PlcRow = { id: number; name: string; statusTopic: string; cmdTopic: string };
@@ -19,22 +18,6 @@ type LampRow = {
 type Tab = "dispositivos" | "usuarios" | "visualizacion";
 
 const PAGE_SIZE = 6;
-
-// Mismos íconos que en app/LampDashboard.tsx — se duplican aquí (nada más
-// los que usa el sidebar) para que el menú se vea idéntico entre Dashboard y
-// Configuración sin tener que sacar un archivo compartido ahorita.
-type SidebarIconName = "home" | "settings" | "history" | "headset";
-
-function SidebarIcon({ name, size = 20 }: { name: SidebarIconName; size?: number }) {
-  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  const paths: Record<SidebarIconName, React.ReactNode> = {
-    home: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9M9 20v-7h6v7" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.95 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15 1.7 1.7 0 0 0 3 14H3v-4h.08A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V3h4v.08A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9 1.7 1.7 0 0 0 21 10v4a1.7 1.7 0 0 0-1.6 1Z" /></>,
-    history: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    headset: <><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><path d="M4 14h3v6H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 1-2Zm16 0h-3v6h2a2 2 0 0 0 2-2v-2a2 2 0 0 0-1-2Z" /></>,
-  };
-  return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" {...common}>{paths[name]}</svg>;
-}
 
 function formatDate(value: string | Date) {
   const date = typeof value === "string" ? new Date(value) : value;
@@ -56,51 +39,14 @@ export function ConfiguracionView({
   initialPlcs: PlcRow[];
   currentUserId: number;
 }) {
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>("dispositivos");
   const [users, setUsers] = useState(initialUsers);
   const [lamps, setLamps] = useState(initialLamps);
   const [plcs, setPlcs] = useState(initialPlcs);
 
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
-
   return (
     <main className="sip-shell">
-      <aside className="sip-sidebar" aria-label="Navegación principal">
-        <div className="sip-logo-box">
-          <Image
-            className="sip-logo-image"
-            src="/sip-logo-cropped.png"
-            alt="SIP Sistemas Inteligentes del Pacífico"
-            width={320}
-            height={143}
-            priority
-            unoptimized
-          />
-        </div>
-        <nav className="sip-nav" aria-label="Sistema">
-          <button type="button" onClick={() => router.push("/")}>
-            <SidebarIcon name="home" />Dashboard
-          </button>
-          <span className="nav-section">Sistema</span>
-          <button className="active" type="button">
-            <SidebarIcon name="settings" />Configuración
-          </button>
-          <button type="button">
-            <SidebarIcon name="history" />Historial
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <button type="button" onClick={handleLogout}>
-            <SidebarIcon name="headset" />Cerrar sesión
-          </button>
-          <span>Versión 1.0.0</span>
-        </div>
-      </aside>
+      <Sidebar active="configuracion" />
 
       <section className="sip-main">
         <header className="config-header">
