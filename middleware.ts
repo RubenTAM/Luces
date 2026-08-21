@@ -40,6 +40,9 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/lamps-config") && session.role !== "admin") {
     return NextResponse.json({ error: "Solo un admin puede hacer esto." }, { status: 403 });
   }
+  if (pathname.startsWith("/api/plcs") && session.role !== "admin") {
+    return NextResponse.json({ error: "Solo un admin puede hacer esto." }, { status: 403 });
+  }
 
   return NextResponse.next();
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
 import { getDb } from "../../db";
-import { users, lamps } from "../../db/schema";
+import { users, lamps, plcs } from "../../db/schema";
 import { getSession } from "../../lib/auth";
 import { ConfiguracionView } from "./ConfiguracionView";
 
@@ -13,18 +13,20 @@ export default async function ConfiguracionPage() {
   const session = await getSession();
   const db = getDb();
 
-  const [userList, lampList] = await Promise.all([
+  const [userList, lampList, plcList] = await Promise.all([
     db
       .select({ id: users.id, email: users.email, name: users.name, role: users.role, createdAt: users.createdAt })
       .from(users)
       .orderBy(asc(users.id)),
     db.select().from(lamps).orderBy(asc(lamps.position)),
+    db.select().from(plcs).orderBy(asc(plcs.id)),
   ]);
 
   return (
     <ConfiguracionView
       initialUsers={userList}
       initialLamps={lampList}
+      initialPlcs={plcList}
       currentUserId={session!.userId}
     />
   );

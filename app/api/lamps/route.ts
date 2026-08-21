@@ -5,7 +5,7 @@ import { getLampsState, releaseLampForce, setLampPower, setLampSchedule } from "
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json(getLampsState());
+  return NextResponse.json(await getLampsState());
 }
 
 export async function POST(request: Request) {
@@ -16,26 +16,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 });
   }
 
-  // Forzar encendido/apagado manual (tag TurnOn_N). Saca la lámpara del
+  // Forzar encendido/apagado manual (tag de comando). Saca la lámpara del
   // control del horario hasta que se libere.
   if (body.power === 0 || body.power === 1) {
-    setLampPower(lampId, body.power === 1);
+    await setLampPower(lampId, body.power === 1);
     return NextResponse.json({ ok: true });
   }
 
   // Liberar el forzado manual y devolver el control al horario automático.
   if (body.release === true) {
-    releaseLampForce(lampId);
+    await releaseLampForce(lampId);
     return NextResponse.json({ ok: true });
   }
 
   // Cambiar hora de encendido/apagado. Ya no se le manda al LOGO: se guarda
-  // en este servidor, que compara contra $logotime y publica TurnOn_N solo.
+  // en este servidor, que compara contra $logotime y publica el comando solo.
   if ((body.which === "on" || body.which === "off") && typeof body.time === "string") {
     if (!/^\d{2}:\d{2}$/.test(body.time)) {
       return NextResponse.json({ error: "Formato de hora inválido, se espera HH:MM" }, { status: 400 });
     }
-    setLampSchedule(lampId, body.which, body.time);
+    await setLampSchedule(lampId, body.which, body.time);
     return NextResponse.json({ ok: true });
   }
 

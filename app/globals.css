@@ -162,8 +162,8 @@ button { cursor:pointer; }
 .lamp-card-title:focus { border-color:#0874ff; outline:2px solid rgba(8,116,255,.18); }
 .lamp-field { display:grid; gap:4px; }
 .lamp-field label { font-size:10.5px; font-weight:650; color:#7c8798; text-transform:uppercase; letter-spacing:.3px; }
-.lamp-field input { padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); font-size:12.5px; }
-.lamp-field input:focus { border-color:#0874ff; outline:2px solid rgba(8,116,255,.18); }
+.lamp-field input, .lamp-field select { padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink); font-size:12.5px; }
+.lamp-field input:focus, .lamp-field select:focus { border-color:#0874ff; outline:2px solid rgba(8,116,255,.18); }
 .lamp-card-actions { display:flex; gap:8px; margin-top:auto; padding-top:4px; }
 .lamp-card-actions .config-btn { flex:1; text-align:center; }
 

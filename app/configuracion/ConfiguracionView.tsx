@@ -5,10 +5,12 @@ import Image from "next/image";
 import { useState } from "react";
 
 type UserRow = { id: number; email: string; name: string | null; role: "admin" | "soporte"; createdAt: string | Date };
+type PlcRow = { id: number; name: string; statusTopic: string; cmdTopic: string };
 type LampRow = {
   id: number;
   position: number;
   name: string;
+  plcId: number | null;
   tagMode: string;
   tagStatus: string;
   tagCommand: string;
@@ -46,16 +48,19 @@ function displayName(user: UserRow) {
 export function ConfiguracionView({
   initialUsers,
   initialLamps,
+  initialPlcs,
   currentUserId,
 }: {
   initialUsers: UserRow[];
   initialLamps: LampRow[];
+  initialPlcs: PlcRow[];
   currentUserId: number;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dispositivos");
   const [users, setUsers] = useState(initialUsers);
   const [lamps, setLamps] = useState(initialLamps);
+  const [plcs, setPlcs] = useState(initialPlcs);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -130,7 +135,12 @@ export function ConfiguracionView({
         </nav>
 
         <div className="config-body">
-          {tab === "dispositivos" && <LampsSection lamps={lamps} setLamps={setLamps} />}
+          {tab === "dispositivos" && (
+            <>
+              <PlcsSection plcs={plcs} setPlcs={setPlcs} />
+              <LampsSection lamps={lamps} setLamps={setLamps} plcs={plcs} />
+            </>
+          )}
           {tab === "usuarios" && (
             <UsersSection users={users} setUsers={setUsers} currentUserId={currentUserId} />
           )}
@@ -177,30 +187,242 @@ function Pagination({
   );
 }
 
+// --- PLCs (LOGO) ---------------------------------------------------------
+
+function PlcsSection({
+  plcs,
+  setPlcs,
+}: {
+  plcs: PlcRow[];
+  setPlcs: React.Dispatch<React.SetStateAction<PlcRow[]>>;
+}) {
+  const [drafts, setDrafts] = useState<Record<number, Omit<PlcRow, "id">>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newPlc, setNewPlc] = useState({ name: "", statusTopic: "", cmdTopic: "" });
+  const [creating, setCreating] = useState(false);
+
+  function draftFor(plc: PlcRow) {
+    return drafts[plc.id] ?? { name: plc.name, statusTopic: plc.statusTopic, cmdTopic: plc.cmdTopic };
+  }
+
+  function updateDraft(plc: PlcRow, field: keyof Omit<PlcRow, "id">, value: string) {
+    setDrafts((current) => ({ ...current, [plc.id]: { ...draftFor(plc), [field]: value } }));
+  }
+
+  async function savePlc(plc: PlcRow) {
+    setError(null);
+    setSavingId(plc.id);
+    try {
+      const response = await fetch(`/api/plcs/${plc.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draftFor(plc)),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "No se pudo guardar el PLC.");
+        return;
+      }
+      setPlcs((current) => current.map((item) => (item.id === plc.id ? data.plc : item)));
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[plc.id];
+        return next;
+      });
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deletePlc(plc: PlcRow) {
+    if (!confirm(`¿Quitar el PLC "${plc.name}"? Solo se puede si ninguna lámpara lo tiene asignado.`)) return;
+    setError(null);
+    setDeletingId(plc.id);
+    try {
+      const response = await fetch(`/api/plcs/${plc.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data.error ?? "No se pudo quitar el PLC.");
+        return;
+      }
+      setPlcs((current) => current.filter((item) => item.id !== plc.id));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function createPlc(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setCreating(true);
+    try {
+      const response = await fetch("/api/plcs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPlc),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "No se pudo agregar el PLC.");
+        return;
+      }
+      setPlcs((current) => [...current, data.plc]);
+      setNewPlc({ name: "", statusTopic: "", cmdTopic: "" });
+      setShowAdd(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <section className="config-section">
+      <div className="section-toolbar">
+        <div>
+          <h2>PLCs (LOGO)</h2>
+          <p className="section-sub">Cada PLC tiene su propio tópico de status y de comando en el broker.</p>
+        </div>
+        <button type="button" className="btn-add" onClick={() => setShowAdd((v) => !v)}>
+          {showAdd ? "Cancelar" : "+ Agregar PLC"}
+        </button>
+      </div>
+      {error && <p className="config-error">{error}</p>}
+
+      {showAdd && (
+        <form className="config-new-row" onSubmit={createPlc}>
+          <label>
+            <span>Nombre</span>
+            <input
+              required
+              placeholder="p. ej. LOGO Planta 2"
+              value={newPlc.name}
+              onChange={(e) => setNewPlc({ ...newPlc, name: e.target.value })}
+            />
+          </label>
+          <label>
+            <span>Tópico de status</span>
+            <input
+              required
+              placeholder="p. ej. logo/planta2/status"
+              value={newPlc.statusTopic}
+              onChange={(e) => setNewPlc({ ...newPlc, statusTopic: e.target.value })}
+            />
+          </label>
+          <label>
+            <span>Tópico de comando</span>
+            <input
+              required
+              placeholder="p. ej. logo/planta2/cmd"
+              value={newPlc.cmdTopic}
+              onChange={(e) => setNewPlc({ ...newPlc, cmdTopic: e.target.value })}
+            />
+          </label>
+          <button type="submit" className="config-btn primary" disabled={creating}>
+            {creating ? "Agregando..." : "Agregar PLC"}
+          </button>
+        </form>
+      )}
+
+      <div style={{ overflowX: "auto" }}>
+        <table className="config-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Tópico de status</th>
+              <th>Tópico de comando</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {plcs.map((plc) => {
+              const draft = draftFor(plc);
+              const dirty =
+                draft.name !== plc.name || draft.statusTopic !== plc.statusTopic || draft.cmdTopic !== plc.cmdTopic;
+              return (
+                <tr key={plc.id}>
+                  <td>
+                    <input value={draft.name} onChange={(e) => updateDraft(plc, "name", e.target.value)} />
+                  </td>
+                  <td>
+                    <input value={draft.statusTopic} onChange={(e) => updateDraft(plc, "statusTopic", e.target.value)} />
+                  </td>
+                  <td>
+                    <input value={draft.cmdTopic} onChange={(e) => updateDraft(plc, "cmdTopic", e.target.value)} />
+                  </td>
+                  <td style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="config-btn primary"
+                      disabled={!dirty || savingId === plc.id}
+                      onClick={() => savePlc(plc)}
+                    >
+                      {savingId === plc.id ? "Guardando..." : "Guardar"}
+                    </button>
+                    <button
+                      type="button"
+                      className="config-btn danger"
+                      disabled={deletingId === plc.id}
+                      onClick={() => deletePlc(plc)}
+                    >
+                      Quitar
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {plcs.length === 0 && (
+              <tr>
+                <td colSpan={4} style={{ color: "#7c8798", textAlign: "center", padding: "24px 20px" }}>
+                  Todavía no hay PLCs configurados.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 // --- Lámparas ----------------------------------------------------------------
 
 function LampsSection({
   lamps,
   setLamps,
+  plcs,
 }: {
   lamps: LampRow[];
   setLamps: React.Dispatch<React.SetStateAction<LampRow[]>>;
+  plcs: PlcRow[];
 }) {
   const [drafts, setDrafts] = useState<Record<number, Omit<LampRow, "id" | "position">>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [newLamp, setNewLamp] = useState({ position: "", name: "", tagMode: "", tagStatus: "", tagCommand: "" });
+  const [newLamp, setNewLamp] = useState({ position: "", name: "", plcId: "", tagMode: "", tagStatus: "", tagCommand: "" });
   const [creating, setCreating] = useState(false);
   const [page, setPage] = useState(1);
 
   function draftFor(lamp: LampRow) {
-    return drafts[lamp.id] ?? { name: lamp.name, tagMode: lamp.tagMode, tagStatus: lamp.tagStatus, tagCommand: lamp.tagCommand };
+    return (
+      drafts[lamp.id] ?? {
+        name: lamp.name,
+        plcId: lamp.plcId,
+        tagMode: lamp.tagMode,
+        tagStatus: lamp.tagStatus,
+        tagCommand: lamp.tagCommand,
+      }
+    );
   }
 
-  function updateDraft(lamp: LampRow, field: keyof Omit<LampRow, "id" | "position">, value: string) {
-    setDrafts((current) => ({ ...current, [lamp.id]: { ...draftFor(lamp), [field]: value } }));
+  function updateDraft(lamp: LampRow, field: keyof Omit<LampRow, "id" | "position">, value: string | number | null) {
+    setDrafts((current) => ({
+      ...current,
+      [lamp.id]: { ...draftFor(lamp), [field]: value } as Omit<LampRow, "id" | "position">,
+    }));
   }
 
   async function saveLamp(lamp: LampRow) {
@@ -253,7 +475,7 @@ function LampsSection({
       const response = await fetch("/api/lamps-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newLamp, position: Number(newLamp.position) }),
+        body: JSON.stringify({ ...newLamp, position: Number(newLamp.position), plcId: Number(newLamp.plcId) }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -261,7 +483,7 @@ function LampsSection({
         return;
       }
       setLamps((current) => [...current, data.lamp].sort((a, b) => a.position - b.position));
-      setNewLamp({ position: "", name: "", tagMode: "", tagStatus: "", tagCommand: "" });
+      setNewLamp({ position: "", name: "", plcId: "", tagMode: "", tagStatus: "", tagCommand: "" });
       setShowAdd(false);
     } finally {
       setCreating(false);
@@ -303,6 +525,23 @@ function LampsSection({
               <input required value={newLamp.name} onChange={(e) => setNewLamp({ ...newLamp, name: e.target.value })} />
             </div>
             <div className="lamp-field">
+              <label>PLC</label>
+              <select
+                required
+                value={newLamp.plcId}
+                onChange={(e) => setNewLamp({ ...newLamp, plcId: e.target.value })}
+              >
+                <option value="" disabled>
+                  Elige un PLC...
+                </option>
+                {plcs.map((plc) => (
+                  <option key={plc.id} value={plc.id}>
+                    {plc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="lamp-field">
               <label>Tag modo (AUTO/MAN)</label>
               <input
                 required
@@ -330,10 +569,15 @@ function LampsSection({
               />
             </div>
             <div className="lamp-card-actions">
-              <button type="submit" className="config-btn primary" disabled={creating}>
+              <button type="submit" className="config-btn primary" disabled={creating || plcs.length === 0}>
                 {creating ? "Agregando..." : "Agregar"}
               </button>
             </div>
+            {plcs.length === 0 && (
+              <p className="config-error" style={{ margin: 0 }}>
+                Primero da de alta un PLC arriba.
+              </p>
+            )}
           </form>
         )}
 
@@ -341,9 +585,11 @@ function LampsSection({
           const draft = draftFor(lamp);
           const dirty =
             draft.name !== lamp.name ||
+            draft.plcId !== lamp.plcId ||
             draft.tagMode !== lamp.tagMode ||
             draft.tagStatus !== lamp.tagStatus ||
             draft.tagCommand !== lamp.tagCommand;
+          const plcName = plcs.find((p) => p.id === draft.plcId)?.name;
           return (
             <div className="lamp-card" key={lamp.id}>
               <div className="lamp-card-head">
@@ -354,6 +600,23 @@ function LampsSection({
                 value={draft.name}
                 onChange={(e) => updateDraft(lamp, "name", e.target.value)}
               />
+              <div className="lamp-field">
+                <label>PLC</label>
+                <select
+                  value={draft.plcId ?? ""}
+                  onChange={(e) => updateDraft(lamp, "plcId", e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="" disabled>
+                    Elige un PLC...
+                  </option>
+                  {plcs.map((plc) => (
+                    <option key={plc.id} value={plc.id}>
+                      {plc.name}
+                    </option>
+                  ))}
+                </select>
+                {!plcName && <span style={{ color: "#c0263f", fontSize: 11 }}>Sin PLC asignado</span>}
+              </div>
               <div className="lamp-field">
                 <label>Tag modo (AUTO/MAN)</label>
                 <input value={draft.tagMode} onChange={(e) => updateDraft(lamp, "tagMode", e.target.value)} />
