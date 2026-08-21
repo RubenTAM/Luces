@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Mode = "AUTO" | "MAN";
@@ -100,6 +101,7 @@ function formatLogoDateTime(epochSeconds: number) {
 type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: string };
 
 export function LampDashboard() {
+  const router = useRouter();
   const [lamps, setLamps] = useState<Lamp[]>(initialLamps);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -199,10 +201,10 @@ export function LampDashboard() {
       <nav className="sip-nav" aria-label="Sistema">
         <button className="active" type="button"><Icon name="home"/>Dashboard</button>
         <span className="nav-section">Sistema</span>
-        <button type="button"><Icon name="settings"/>Configuración</button>
+        <button type="button" onClick={() => router.push("/configuracion")}><Icon name="settings"/>Configuración</button>
         <button type="button"><Icon name="history"/>Historial</button>
       </nav>
-      <div className="sidebar-footer"><button type="button"><Icon name="headset"/>Soporte</button><span>Versión 1.0.0</span></div>
+      <div className="sidebar-footer"><button type="button" onClick={() => { fetch("/api/auth/logout", { method: "POST" }).then(() => { router.push("/login"); router.refresh(); }); }}><Icon name="headset"/>Cerrar sesión</button><span>Versión 1.0.0</span></div>
     </aside>
 
     <section className="sip-main">

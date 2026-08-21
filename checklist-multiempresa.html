@@ -1,0 +1,514 @@
+<title>Luces Multiempresa</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f4f2ed;
+    --surface: #ffffff;
+    --surface-2: #ede9e0;
+    --text: #211f1b;
+    --muted: #6f6a5e;
+    --faint: #a39d8d;
+    --border: #ddd7c8;
+    --accent: #b5560f;
+    --accent-soft: #b5560f1a;
+    --accent-contrast: #fff8f0;
+    --done: #4d7c4a;
+    --done-soft: #4d7c4a1a;
+    --shadow: 0 1px 2px rgba(33, 31, 27, 0.06), 0 8px 24px -12px rgba(33, 31, 27, 0.12);
+    --focus: #1c6fb0;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #18160f;
+      --surface: #221f17;
+      --surface-2: #2a2619;
+      --text: #f1ece0;
+      --muted: #b3a98f;
+      --faint: #7d7562;
+      --border: #3a3527;
+      --accent: #e08a3e;
+      --accent-soft: #e08a3e26;
+      --accent-contrast: #201200;
+      --done: #7fb478;
+      --done-soft: #7fb47826;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+      --focus: #6cb6ea;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #18160f;
+    --surface: #221f17;
+    --surface-2: #2a2619;
+    --text: #f1ece0;
+    --muted: #b3a98f;
+    --faint: #7d7562;
+    --border: #3a3527;
+    --accent: #e08a3e;
+    --accent-soft: #e08a3e26;
+    --accent-contrast: #201200;
+    --done: #7fb478;
+    --done-soft: #7fb47826;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    --focus: #6cb6ea;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 20px 96px;
+  }
+
+  header.top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .top-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 18px 20px 16px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0 0 12px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .overall {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .overall-track {
+    flex: 1;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .overall-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--done));
+    width: 0%;
+    transition: width 0.35s ease;
+  }
+
+  .overall-count {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .intro {
+    padding: 28px 0 8px;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 62ch;
+  }
+
+  .intro strong { color: var(--text); }
+
+  .reset-row {
+    margin: 6px 0 32px;
+  }
+
+  .reset-btn {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+
+  .reset-btn:hover { border-color: var(--faint); color: var(--text); }
+  .reset-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  section.phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+
+  .phase-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .phase-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 3px 8px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .phase-num.is-complete {
+    color: var(--done);
+    background: var(--done-soft);
+  }
+
+  .phase-titles { flex: 1; min-width: 0; }
+
+  .phase-title {
+    font-size: 16.5px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+
+  .phase-desc {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .phase-progress {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--faint);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+  }
+
+  ul.items {
+    list-style: none;
+    margin: 0;
+    padding: 6px 8px;
+  }
+
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 9px;
+  }
+
+  .item:hover { background: var(--surface-2); }
+
+  .item label {
+    flex: 1;
+    font-size: 14.5px;
+    cursor: pointer;
+    padding-top: 1px;
+  }
+
+  .item code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.86em;
+    background: var(--surface-2);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  .item.checked label {
+    color: var(--faint);
+    text-decoration: line-through;
+    text-decoration-color: var(--faint);
+    text-decoration-thickness: 1.5px;
+  }
+
+  input[type="checkbox"] {
+    appearance: none;
+    width: 19px;
+    height: 19px;
+    border-radius: 5px;
+    border: 1.5px solid var(--faint);
+    background: var(--surface);
+    flex-shrink: 0;
+    margin-top: 1px;
+    cursor: pointer;
+    display: grid;
+    place-content: center;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  input[type="checkbox"]::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    transform: scale(0);
+    transition: transform 0.12s ease;
+    box-shadow: inset 1em 1em var(--accent-contrast);
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 45% 62%);
+  }
+
+  input[type="checkbox"]:checked {
+    background: var(--done);
+    border-color: var(--done);
+  }
+
+  input[type="checkbox"]:checked::before { transform: scale(1); }
+
+  footer.note {
+    color: var(--faint);
+    font-size: 12.5px;
+    text-align: center;
+    padding-top: 18px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="top-inner">
+      <span class="eyebrow">Luces &middot; ruta a multiempresa</span>
+      <h1>Del dashboard de una planta a una app para varias empresas</h1>
+      <div class="overall">
+        <div class="overall-track"><div class="overall-fill" id="overallFill"></div></div>
+        <div class="overall-count" id="overallCount">0 / 0</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="intro">
+    Checklist en orden de dependencia: cada fase da por hecho que la anterior ya está resuelta.
+    Los cambios se guardan solos en <strong>este navegador</strong> — si abres el checklist en otro
+    equipo o borras datos del sitio, empieza de nuevo.
+  </div>
+  <div class="reset-row"><button class="reset-btn" id="resetBtn">Reiniciar checklist</button></div>
+
+  <main id="phases"></main>
+
+  <footer class="note">Luces &middot; checklist multiempresa</footer>
+</div>
+
+<script>
+  const PHASES = [
+    {
+      title: "Higiene inmediata",
+      desc: "Antes de tocar el modelo de datos: sacar del código lo que hoy es una fuga activa.",
+      items: [
+        "Sacar la URL, usuario y contraseña del broker de <code>mqtt-client.ts</code> a variables de entorno",
+        "Rotar la contraseña del broker desde el panel de HiveMQ Cloud",
+        "Confirmar que los archivos <code>.env</code> están en <code>.gitignore</code> y que la clave vieja no sigue en el historial de git",
+      ],
+    },
+    {
+      title: "Modelo de datos (Postgres + Drizzle)",
+      desc: "Todo lo demás — MQTT multi-sitio, login, panel de admin — necesita este esquema primero.",
+      items: [
+        "Tabla <code>companies</code> (empresas)",
+        "Tabla <code>sites</code>: empresa, prefijo de topic, número de lámparas, zona horaria",
+        "Tabla <code>users</code>: empresa, rol, correo, contraseña",
+        "Tabla <code>plc_credentials</code>: usuario del broker y secreto cifrado, por sitio",
+        "Tabla <code>schedules</code>: horario por lámpara, reemplaza el mensaje retained en MQTT",
+        "Tabla de eventos/auditoría: quién forzó qué lámpara y cuándo",
+        "Apuntar <code>drizzle.config.ts</code> al Postgres real de DigitalOcean (no D1/sqlite)",
+        "Generar y aplicar las migraciones",
+      ],
+    },
+    {
+      title: "Cliente MQTT multi-sitio",
+      desc: "Validar el patrón de un solo broker con topics namespaced antes de meterle login encima.",
+      items: [
+        "Reemplazar la constante fija <code>planta1</code> por un <code>siteId</code> dinámico",
+        "Topics dinámicos: <code>logo/{siteId}/cmd</code> y <code>logo/{siteId}/status</code>",
+        "<code>LAMP_COUNT</code> dinámico, leído desde la tabla <code>sites</code>",
+        "Probar con un segundo sitio de prueba en el mismo broker, para confirmar el aislamiento por topic",
+        "Decidir: ¿un cliente MQTT por sitio, o uno compartido suscrito a <code>logo/+/status</code>?",
+        "Mover el horario guardado como mensaje retained en MQTT a la tabla <code>schedules</code>",
+      ],
+    },
+    {
+      title: "Autenticación y aislamiento por empresa",
+      desc: "El login real, y la regla que nunca se debe romper: un endpoint nunca confía en un id que mande el cliente.",
+      items: [
+        "Elegir la librería de auth (Auth.js o Better-Auth) sobre el mismo Postgres",
+        "Registro e inicio de sesión de usuarios",
+        "Sesión que cargue <code>company_id</code> y rol (admin / operador)",
+        "Helper o middleware que valide que el <code>site_id</code> pedido pertenece a la empresa de la sesión",
+        "Aplicar esa validación en cada endpoint de <code>/api</code>, sin excepción",
+      ],
+    },
+    {
+      title: "Identidad de cada PLC en el broker",
+      desc: "La otra mitad del aislamiento: que un PLC no pueda tocar los topics de otra empresa aunque quisiera.",
+      items: [
+        "Definir el esquema de topics por sitio (namespacing)",
+        "Crear credenciales MQTT independientes por sitio en HiveMQ",
+        "Configurar ACL por credencial, restringida a su propio prefijo de topic",
+        "Guardar esas credenciales cifradas en <code>plc_credentials</code>",
+      ],
+    },
+    {
+      title: "Panel de administración",
+      desc: "El flujo con el que se da de alta un cliente nuevo, sin tocar código.",
+      items: [
+        "Pantalla para dar de alta una empresa nueva",
+        "Pantalla para agregar un sitio/PLC (genera prefijo de topic + credenciales)",
+        "Invitar usuarios a una empresa con un rol",
+        "Documentar cómo cargar las credenciales y topics generados en el LOGO físico",
+      ],
+    },
+    {
+      title: "Después del lanzamiento",
+      desc: "No bloquean el lanzamiento con las primeras empresas, pero conviene tenerlos ya anotados.",
+      items: [
+        "Zona horaria por sitio, en vez de UTC fijo para todos",
+        "Alerta por correo o webhook cuando un PLC se desconecta",
+        "Evaluar separar un worker dedicado a MQTT si hacen falta varias réplicas del app",
+      ],
+    },
+  ];
+
+  const STORAGE_KEY = "luces-checklist-v1";
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveState(state) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      /* private mode or storage blocked: state just won't persist */
+    }
+  }
+
+  let state = loadState();
+
+  const phasesEl = document.getElementById("phases");
+  const overallFill = document.getElementById("overallFill");
+  const overallCount = document.getElementById("overallCount");
+
+  function itemId(pIdx, iIdx) {
+    return "p" + pIdx + "-i" + iIdx;
+  }
+
+  function render() {
+    phasesEl.innerHTML = "";
+    let totalDone = 0;
+    let totalItems = 0;
+
+    PHASES.forEach((phase, pIdx) => {
+      const section = document.createElement("section");
+      section.className = "phase";
+
+      const doneCount = phase.items.filter((_, iIdx) => state[itemId(pIdx, iIdx)]).length;
+      const isComplete = doneCount === phase.items.length;
+      totalDone += doneCount;
+      totalItems += phase.items.length;
+
+      const head = document.createElement("div");
+      head.className = "phase-head";
+      head.innerHTML = `
+        <span class="phase-num${isComplete ? " is-complete" : ""}">${String(pIdx).padStart(2, "0")}</span>
+        <div class="phase-titles">
+          <p class="phase-title">${phase.title}</p>
+          <p class="phase-desc">${phase.desc}</p>
+        </div>
+        <div class="phase-progress">${doneCount}/${phase.items.length}</div>
+      `;
+      section.appendChild(head);
+
+      const ul = document.createElement("ul");
+      ul.className = "items";
+
+      phase.items.forEach((text, iIdx) => {
+        const id = itemId(pIdx, iIdx);
+        const checked = !!state[id];
+
+        const li = document.createElement("li");
+        li.className = "item" + (checked ? " checked" : "");
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = id;
+        checkbox.checked = checked;
+        checkbox.addEventListener("change", () => {
+          state[id] = checkbox.checked;
+          saveState(state);
+          render();
+        });
+
+        const label = document.createElement("label");
+        label.htmlFor = id;
+        label.innerHTML = text;
+
+        li.appendChild(checkbox);
+        li.appendChild(label);
+        ul.appendChild(li);
+      });
+
+      section.appendChild(ul);
+      phasesEl.appendChild(section);
+    });
+
+    const pct = totalItems ? Math.round((totalDone / totalItems) * 100) : 0;
+    overallFill.style.width = pct + "%";
+    overallCount.textContent = totalDone + " / " + totalItems;
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if (confirm("¿Reiniciar todo el checklist? Esto borra tu progreso guardado en este navegador.")) {
+      state = {};
+      saveState(state);
+      render();
+    }
+  });
+
+  render();
+</script>

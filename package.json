@@ -11,12 +11,15 @@
     "start": "next start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "db:seed": "node --env-file=.env.local scripts/seed.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
     "mqtt": "5.10.4",
     "next": "16.2.6",
+    "postgres": "3.4.5",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
