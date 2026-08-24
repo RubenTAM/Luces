@@ -51,7 +51,7 @@ function eventTone(message: string): "on" | "off" | "mode" | "force" {
   return "mode";
 }
 
-export function HistorialView({ initialLamps }: { initialLamps: LampOption[] }) {
+export function HistorialView({ initialLamps, isAdmin }: { initialLamps: LampOption[]; isAdmin: boolean }) {
   const [fechaInicio, setFechaInicio] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
@@ -66,6 +66,7 @@ export function HistorialView({ initialLamps }: { initialLamps: LampOption[] }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -107,6 +108,36 @@ export function HistorialView({ initialLamps }: { initialLamps: LampOption[] }) 
     fetchEvents();
   }
 
+  // Borra TODA la tabla de eventos (no nomás lo que se está viendo con los
+  // filtros de arriba) — es para vaciar la bitácora de vez en cuando y que
+  // no se vaya saturando la base de datos, no una forma de "limpiar la
+  // vista". Por eso el mensaje de confirmación es bien explícito.
+  async function handleDeleteAll() {
+    if (
+      !confirm(
+        "¿Borrar TODO el historial de eventos? Esto elimina permanentemente todos los renglones guardados (de cualquier fecha, no nomás los que ves filtrados ahorita). No se puede deshacer."
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/historial", { method: "DELETE" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(data.error ?? "No se pudo borrar el historial.");
+        return;
+      }
+      setEvents([]);
+      setTruncated(false);
+    } catch {
+      setError("No se pudo conectar con el servidor.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <main className="sip-shell">
       <Sidebar active="historial" />
@@ -126,9 +157,21 @@ export function HistorialView({ initialLamps }: { initialLamps: LampOption[] }) 
                 <h2>Eventos registrados</h2>
                 <p className="section-sub">Cambios de estado guardados con fecha y hora.</p>
               </div>
-              <button type="button" className="btn-icon" onClick={() => fetchEvents()} aria-label="Actualizar">
-                <Icon name="refresh" size={16} />
-              </button>
+              <div className="section-toolbar-actions">
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="config-btn danger"
+                    onClick={handleDeleteAll}
+                    disabled={deleting}
+                  >
+                    {deleting ? "Borrando..." : "Borrar historial"}
+                  </button>
+                )}
+                <button type="button" className="btn-icon" onClick={() => fetchEvents()} aria-label="Actualizar">
+                  <Icon name="refresh" size={16} />
+                </button>
+              </div>
             </div>
 
             <form className="historial-filters" onSubmit={handleSearch}>
