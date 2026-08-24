@@ -133,6 +133,11 @@ button { cursor:pointer; }
 .power-toggle { display:grid; flex:0 0 28px; width:28px; height:28px; place-items:center; border:1px solid var(--line); border-radius:50%; color:#8a95a8; background:#f4f6f9; }
 .power-toggle:hover { background:#eef1f5; }
 .power-toggle.on { color:#00a65a; background:#dcf5e5; border-color:#bfe9d1; }
+/* Forzada (manual, fuera de horario): un click aquí ya no vuelve a forzar
+   al estado contrario, suelta el forzado y regresa al horario automático —
+   el aro naranja es para que se note que este botón ahorita "libera" en vez
+   de "forzar". */
+.power-toggle.forced { border-color:#f5a623; box-shadow:0 0 0 2px rgba(245,166,35,.28); }
 .lamp-status { display:flex; align-items:center; gap:12px; width:100%; padding:0; border:0; background:transparent; text-align:left; }
 .status-icon { display:grid; width:48px; height:48px; flex:0 0 48px; place-items:center; border-radius:50%; color:#50627c; background:#eff1f3; }
 .lamp-status.on .status-icon { color:#00a85b; background:#dcf5e5; }

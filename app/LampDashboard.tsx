@@ -183,6 +183,22 @@ export function LampDashboard() {
   };
 
   const forcePower = (lamp: Lamp) => {
+    // Si la lámpara YA está forzada, este botón deja de forzarla (suelta el
+    // control y lo regresa al horario automático) en vez de forzarla al
+    // estado contrario. Antes siempre mandaba un nuevo "power" sin importar
+    // si ya estaba forzada, así que nunca se podía soltar de verdad: cada
+    // click nomás rebotaba entre "encendida forzada" y "apagada forzada"
+    // para siempre, y el horario dejaba de tocar esa lámpara hasta que se
+    // reiniciara el servidor — ese era el bug reportado.
+    if (lamp.forced) {
+      fetch("/api/lamps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lampId: lamp.id, release: true }),
+      }).catch(() => {});
+      return;
+    }
+
     // Forzado de emergencia: publica TurnOn_N y saca la lámpara del control
     // del horario hasta que se libere del lado del servidor. El ícono y la
     // tarjeta se pondrán en verde/gris solos cuando el LOGO confirme el
@@ -227,7 +243,14 @@ export function LampDashboard() {
                     return <article className={`sip-card ${hasData ? "" : "disabled"}`} key={lamp.id}>
                       <div className="card-head">
                         <h3>{lamp.name}</h3>
-                        <button type="button" className={`power-toggle ${hasData && lamp.isOn ? "on" : ""}`} disabled={!hasData} onClick={() => forcePower(lamp)} aria-label={`Forzar ${lamp.isOn ? "apagado" : "encendido"} de ${lamp.name}`}>
+                        <button
+                          type="button"
+                          className={`power-toggle ${hasData && lamp.isOn ? "on" : ""} ${hasData && lamp.forced ? "forced" : ""}`}
+                          disabled={!hasData}
+                          onClick={() => forcePower(lamp)}
+                          aria-label={lamp.forced ? `Quitar forzado de ${lamp.name}, regresar a automático` : `Forzar ${lamp.isOn ? "apagado" : "encendido"} de ${lamp.name}`}
+                          title={lamp.forced ? "Quitar forzado (regresa a automático)" : "Forzar encendido/apagado"}
+                        >
                           <Icon name="power" size={15}/>
                         </button>
                       </div>
