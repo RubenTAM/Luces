@@ -244,12 +244,25 @@ export function LampDashboard() {
                 <div className="lamp-board">
                   {group.items.map((lamp) => {
                     const hasData = lamp.mode !== null;
+                    // El aro naranja y el texto "Forzada" SOLO se muestran
+                    // mientras la lámpara está forzada Y encendida de
+                    // verdad. Si lamp.forced sigue en true pero isOn ya lee
+                    // apagado (un instante de por medio mientras se suelta
+                    // el forzado, o cualquier otro desfase con la señal
+                    // real del LOGO), la tarjeta ya no debe decir "Señal
+                    // Apagada Forzada" ni ponerse naranja — eso es justo lo
+                    // que se pidió quitar. Se ve plano, gris, como
+                    // cualquier lámpara apagada en automático. El backend
+                    // (forcePower) sigue usando lamp.forced tal cual para
+                    // decidir si el click suelta el forzado o lo activa —
+                    // esto de aquí es solo lo que se MUESTRA en pantalla.
+                    const showForced = hasData && lamp.forced && lamp.isOn === true;
                     return <article className={`sip-card ${hasData ? "" : "disabled"}`} key={lamp.id}>
                       <div className="card-head">
                         <h3>{lamp.name}</h3>
                         <button
                           type="button"
-                          className={`power-toggle ${hasData && lamp.isOn ? "on" : ""} ${hasData && lamp.forced ? "forced" : ""}`}
+                          className={`power-toggle ${hasData && lamp.isOn ? "on" : ""} ${showForced ? "forced" : ""}`}
                           disabled={!hasData}
                           onClick={() => forcePower(lamp)}
                           aria-label={lamp.forced ? `Quitar forzado de ${lamp.name}, regresar a automático` : `Forzar encendido de ${lamp.name}`}
@@ -258,10 +271,10 @@ export function LampDashboard() {
                           <Icon name="power" size={15}/>
                         </button>
                       </div>
-                      <button className={`lamp-status ${hasData && lamp.isOn ? "on" : ""} ${hasData && lamp.forced ? "forced" : ""}`} disabled type="button">
+                      <button className={`lamp-status ${hasData && lamp.isOn ? "on" : ""} ${showForced ? "forced" : ""}`} disabled type="button">
                         <span className="status-icon"><Icon name="lamp" size={22}/></span>
                         <span className="status-text">
-                          <b>{hasData ? (lamp.forced ? `Señal ${lamp.isOn ? "Encendida" : "Apagada"} Forzada` : (lamp.isOn ? "Encendida" : "Apagada")) : PLACEHOLDER}</b>
+                          <b>{hasData ? (showForced ? "Señal Encendida Forzada" : (lamp.isOn ? "Encendida" : "Apagada")) : PLACEHOLDER}</b>
                           <small className="readonly">{hasData ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
                         </span>
                       </button>

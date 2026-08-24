@@ -70,6 +70,17 @@ type InternalState = {
   // cada mensaje de estado. null = todavía no sincronizado (recién arrancó
   // el servidor o la lámpara acaba de pasar a Automático).
   commandedOn: Record<number, boolean | null>;
+  // Cuándo (ms epoch de este servidor) se publicó por última vez un comando
+  // por horario para cada lámpara — ver REFRESH_MS más abajo: aunque
+  // commandedOn no haya cambiado, cada cierto tiempo se vuelve a publicar
+  // el mismo valor como "refresco de seguridad", por si el comando anterior
+  // nunca llegó a pegar de verdad en el LOGO (reinicio del LOGO, alguien
+  // tocó la marca a mano, un mensaje que se perdió, etc.) — antes, una vez
+  // que el servidor "creía" que ya había mandado el comando correcto, nunca
+  // lo volvía a mandar hasta el siguiente cambio de horario (horas después),
+  // así que si ese primer comando no pegó, se veía como que "el horario no
+  // manda nada" sin ningún error de por medio.
+  commandedAt: Record<number, number>;
   // Lámparas puestas en forzado manual (botón de emergencia): mientras estén
   // en true, evaluateSchedule las ignora por completo.
   forced: Record<number, boolean>;
@@ -119,6 +130,7 @@ const state: InternalState = globalThis.__sipState ?? {
   reported: {},
   schedule: {},
   commandedOn: {},
+  commandedAt: {},
   forced: {},
   updatedAt: null,
   connected: false,
@@ -146,8 +158,13 @@ function ensureLampDefaults(id: number) {
   if (!state.reported[id]) state.reported[id] = { isOn: null, mode: null };
   if (!state.schedule[id]) state.schedule[id] = { onTime: "18:00", offTime: "06:00" };
   if (!(id in state.commandedOn)) state.commandedOn[id] = null;
+  if (!(id in state.commandedAt)) state.commandedAt[id] = 0;
   if (!(id in state.forced)) state.forced[id] = false;
 }
+
+// Cada cuánto se vuelve a publicar el comando de horario aunque no haya
+// cambiado, como refresco de seguridad (ver el comentario de commandedAt).
+const SCHEDULE_REFRESH_MS = 5 * 60_000;
 
 function minutesOfDay(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -256,9 +273,21 @@ function evaluateSchedule(client: MqttClient, lamp: LampConfig, plc: PlcConfig |
   if (plcTime === undefined) return; // todavía no tenemos la hora de ESTE PLC
 
   const desiredOn = isWithinSchedule(plcTime, entry);
-  if (state.commandedOn[id] === desiredOn) return;
+
+  // Se vuelve a publicar si el valor deseado CAMBIÓ, o si ya pasó
+  // SCHEDULE_REFRESH_MS desde la última vez que se publicó — este segundo
+  // caso es el "refresco de seguridad": normalmente no hace nada porque el
+  // LOGO ya tiene el valor correcto, pero si por lo que sea (un reinicio del
+  // LOGO, alguien tocó la marca a mano, un mensaje que no llegó) el valor
+  // real no coincide con lo que el servidor "cree" que ya mandó, esto lo
+  // corrige solo en unos minutos en vez de quedarse esperando hasta el
+  // siguiente cambio de horario (que puede ser horas después).
+  const alreadyCommanded = state.commandedOn[id] === desiredOn;
+  const dueForRefresh = Date.now() - state.commandedAt[id] > SCHEDULE_REFRESH_MS;
+  if (alreadyCommanded && !dueForRefresh) return;
 
   state.commandedOn[id] = desiredOn;
+  state.commandedAt[id] = Date.now();
   client.publish(plc.cmdTopic, buildPowerPayload(lamp.tagCommand, desiredOn), { qos: 0 });
 }
 
