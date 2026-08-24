@@ -1,13 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb } from "../../../db";
-import { lamps } from "../../../db/schema";
+import { lamps, type Lamp } from "../../../db/schema";
 import { getSession } from "../../../lib/auth";
 import { invalidateMqttConfigCache } from "../../mqtt-client";
 
 async function requireAdmin() {
   const session = await getSession();
   return session?.role === "admin" ? session : null;
+}
+
+// Dos lámparas del MISMO PLC nunca deben compartir una tag (ni entre sus
+// propias 3 tags, ni con las de otra lámpara ahí) — el LOGO solo tiene una
+// variable con ese nombre, así que si dos lámparas apuntan a la misma tag
+// terminan peleándose por ella en silencio: cada vez que una publica un
+// comando, pisa lo que acababa de mandar la otra, y una de las dos
+// simplemente deja de responder sin que salga ningún error. Antes nada
+// evitaba guardar esto por accidente (típico copy-paste al dar de alta una
+// lámpara nueva) — esta función corta eso desde la API, antes de guardar.
+function findTagCollision(
+  siblings: Lamp[],
+  candidate: { tagMode: string; tagStatus: string; tagCommand: string },
+  excludeLampId?: number
+): string | null {
+  const candidateTags = [candidate.tagMode, candidate.tagStatus, candidate.tagCommand];
+  for (const sibling of siblings) {
+    if (excludeLampId !== undefined && sibling.id === excludeLampId) continue;
+    const siblingTags = [sibling.tagMode, sibling.tagStatus, sibling.tagCommand];
+    for (const tag of candidateTags) {
+      if (siblingTags.includes(tag)) {
+        return `La tag "${tag}" ya la está usando la lámpara No. ${sibling.position} (${sibling.name}) en este mismo PLC. Dos lámparas del mismo PLC no pueden compartir una tag — revisa que las 3 tags de cada una sean distintas.`;
+      }
+    }
+  }
+  return null;
 }
 
 export async function GET() {
@@ -57,6 +83,12 @@ export async function POST(request: NextRequest) {
 
   const db = getDb();
   try {
+    const siblings = await db.select().from(lamps).where(eq(lamps.plcId, plcId));
+    const collision = findTagCollision(siblings, { tagMode, tagStatus, tagCommand });
+    if (collision) {
+      return NextResponse.json({ error: collision }, { status: 409 });
+    }
+
     const [created] = await db
       .insert(lamps)
       .values({ position, name, plcId, tagMode, tagStatus, tagCommand })
