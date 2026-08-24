@@ -264,11 +264,15 @@ export function LampDashboard() {
                 return (
                   <div className={`status-plc ${tone}`} key={plc.id}>
                     <div className="status-plc-ring">
-                      <Icon name={tone === "offline" ? "close" : tone === "pending" ? "clock" : "check"} size={18}/>
+                      <Icon name={tone === "offline" ? "close" : tone === "pending" ? "clock" : "check"} size={20}/>
                     </div>
                     <div className="status-plc-info">
-                      <strong>Estado sistema {plc.name} <span className="status-plc-ordinal">(Sistema {index + 1})</span></strong>
-                      <span className="status-plc-state">{label}</span>
+                      <strong className="status-plc-name">Estado sistema {plc.name}</strong>
+                      <span className="status-plc-meta">
+                        <span className="status-plc-ordinal">Sistema {index + 1}</span>
+                        <span className="status-plc-dot">•</span>
+                        <span className="status-plc-state">{label}</span>
+                      </span>
                     </div>
                   </div>
                 );
