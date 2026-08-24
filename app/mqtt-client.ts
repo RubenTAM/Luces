@@ -76,10 +76,22 @@ type InternalState = {
   updatedAt: number | null;
   connected: boolean;
   // "$logotime" que manda el LOGO: segundos desde 1970-01-01 (Unix timestamp),
-  // sin ajuste de zona horaria — así es como ya se muestra en la cabecera.
-  // Si hay más de un PLC, se queda con el valor del último mensaje que
-  // llegue de cualquiera de los dos (para la cabecera es suficiente).
+  // sin ajuste de zona horaria. Este es SOLO para mostrar un reloj en la
+  // cabecera del Dashboard — con más de un PLC, se queda con el valor del
+  // último mensaje que llegue de cualquiera de los dos, así que si sus
+  // relojes internos no coinciden exactamente, este valor va a "saltar"
+  // entre uno y otro. NO se debe usar para decidir horarios de encendido —
+  // para eso está plcLogoTime, abajo.
   logoTime: number | null;
+  // La hora de CADA PLC por separado (clave = id del PLC), porque cada LOGO
+  // tiene su propio reloj interno y no necesariamente están sincronizados
+  // entre sí. evaluateSchedule() SIEMPRE debe comparar el horario de una
+  // lámpara contra la hora de SU PROPIO PLC, nunca contra un reloj
+  // compartido — antes de que existiera este campo, usaba state.logoTime
+  // (uno solo, global) y esa fue la causa de que, en cuanto había dos PLCs
+  // conectados a la vez, los comandos de encendido/apagado empezaran a
+  // mandarse en 1/0/1/0 sin parar (ver la nota larga en evaluateSchedule).
+  plcLogoTime: Record<number, number>;
 };
 
 declare global {
@@ -106,6 +118,7 @@ const state: InternalState = globalThis.__sipState ?? {
   updatedAt: null,
   connected: false,
   logoTime: null,
+  plcLogoTime: {},
 };
 globalThis.__sipState = state;
 
@@ -218,10 +231,25 @@ function evaluateSchedule(client: MqttClient, lamp: LampConfig, plc: PlcConfig |
   }
 
   if (state.forced[id]) return; // forzado manual activo: el horario no manda aquí
-  if (state.logoTime === null) return; // todavía no tenemos referencia de hora
   if (!plc) return; // la lámpara quedó sin PLC asignado (no debería pasar, pero por si acaso)
 
-  const desiredOn = isWithinSchedule(state.logoTime, entry);
+  // La hora se compara contra el reloj de SU PROPIO PLC (plcLogoTime[plc.id]),
+  // nunca contra un reloj global compartido entre PLCs. Cada LOGO manda su
+  // propio "$logotime" y los dos relojes internos no necesariamente
+  // coinciden exactamente entre sí. Antes esto comparaba contra
+  // state.logoTime, una sola variable que se sobrescribía con el mensaje
+  // más reciente de CUALQUIER PLC — en cuanto había dos PLCs conectados y
+  // publicando cada uno cada pocos segundos, cada mensaje de uno pisaba la
+  // hora que había dejado el otro, así que el horario se evaluaba a cada
+  // rato con el reloj equivocado. Si los dos relojes no coincidían al
+  // segundo (lo normal, cada LOGO lleva su propio RTC), eso hacía que
+  // desiredOn cambiara de true a false y de vuelta a true en cada mensaje,
+  // y el comando de encendido/apagado se mandara en 1/0/1/0 sin parar cada
+  // ~5s — exactamente el problema reportado.
+  const plcTime = state.plcLogoTime[plc.id];
+  if (plcTime === undefined) return; // todavía no tenemos la hora de ESTE PLC
+
+  const desiredOn = isWithinSchedule(plcTime, entry);
   if (state.commandedOn[id] === desiredOn) return;
 
   state.commandedOn[id] = desiredOn;
@@ -381,7 +409,10 @@ function getClient(): MqttClient {
         }
 
         const logoTimeValue = reported["$logotime"];
-        if (typeof logoTimeValue === "number") state.logoTime = logoTimeValue;
+        if (typeof logoTimeValue === "number") {
+          state.logoTime = logoTimeValue; // reloj que se muestra en la cabecera (solo display)
+          state.plcLogoTime[plc.id] = logoTimeValue; // hora de ESTE PLC, para evaluar SU horario
+        }
 
         state.updatedAt = Date.now();
 
