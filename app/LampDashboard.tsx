@@ -183,13 +183,16 @@ export function LampDashboard() {
   };
 
   const forcePower = (lamp: Lamp) => {
-    // Si la lámpara YA está forzada, este botón deja de forzarla (suelta el
-    // control y lo regresa al horario automático) en vez de forzarla al
-    // estado contrario. Antes siempre mandaba un nuevo "power" sin importar
-    // si ya estaba forzada, así que nunca se podía soltar de verdad: cada
-    // click nomás rebotaba entre "encendida forzada" y "apagada forzada"
-    // para siempre, y el horario dejaba de tocar esa lámpara hasta que se
-    // reiniciara el servidor — ese era el bug reportado.
+    // El botón de forzado es de UN SOLO SENTIDO: únicamente sirve para
+    // forzar el ENCENDIDO de emergencia. No existe "forzar apagado" — el
+    // mismo botón, cuando la lámpara ya está forzada, simplemente SUELTA el
+    // forzado (regresa el control al horario/modo automático) en vez de
+    // mandar un apagado forzado. Así la tarjeta nunca muestra "Apagada
+    // Forzada": al soltar, vuelve a verse como cualquier lámpara en
+    // automático (gris si está apagada, verde si está encendida), tal como
+    // se pidió. Antes este botón mandaba "power: apagar" cuando la lámpara
+    // ya estaba encendida (forzada o no), así que un segundo click terminaba
+    // forzando el apagado — ese era el comportamiento que había que quitar.
     if (lamp.forced) {
       fetch("/api/lamps", {
         method: "POST",
@@ -200,13 +203,14 @@ export function LampDashboard() {
     }
 
     // Forzado de emergencia: publica TurnOn_N y saca la lámpara del control
-    // del horario hasta que se libere del lado del servidor. El ícono y la
-    // tarjeta se pondrán en verde/gris solos cuando el LOGO confirme el
-    // cambio real vía FB_LampN.
+    // del horario hasta que se libere del lado del servidor. Siempre es
+    // "encender" — nunca "apagar" — porque forzar el apagado ya no es una
+    // acción que exista. El ícono y la tarjeta se pondrán en verde solos
+    // cuando el LOGO confirme el cambio real vía FB_LampN.
     fetch("/api/lamps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lampId: lamp.id, power: lamp.isOn ? 0 : 1 }),
+      body: JSON.stringify({ lampId: lamp.id, power: 1 }),
     }).catch(() => {});
   };
 
@@ -248,8 +252,8 @@ export function LampDashboard() {
                           className={`power-toggle ${hasData && lamp.isOn ? "on" : ""} ${hasData && lamp.forced ? "forced" : ""}`}
                           disabled={!hasData}
                           onClick={() => forcePower(lamp)}
-                          aria-label={lamp.forced ? `Quitar forzado de ${lamp.name}, regresar a automático` : `Forzar ${lamp.isOn ? "apagado" : "encendido"} de ${lamp.name}`}
-                          title={lamp.forced ? "Quitar forzado (regresa a automático)" : "Forzar encendido/apagado"}
+                          aria-label={lamp.forced ? `Quitar forzado de ${lamp.name}, regresar a automático` : `Forzar encendido de ${lamp.name}`}
+                          title={lamp.forced ? "Quitar forzado (regresa a automático)" : "Forzar encendido"}
                         >
                           <Icon name="power" size={15}/>
                         </button>
