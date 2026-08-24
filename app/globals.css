@@ -3,7 +3,7 @@
 :root { --navy:#001d42; --navy-deep:#00152f; --ink:#061d43; --blue:#076cff; --green:#00a65a; --muted:#60708d; --line:#dbe3ed; --bg:#fbfcfe; }
 @theme inline { --color-background:var(--bg); --color-foreground:var(--ink); --font-sans:"Inter","Segoe UI",Arial,sans-serif; }
 * { box-sizing:border-box; }
-body { min-width:320px; min-height:100vh; margin:0; background:var(--bg); color:var(--ink); font-family:"Inter","Segoe UI",Arial,sans-serif; }
+body { min-width:320px; min-height:100vh; margin:0; overflow-x:hidden; background:var(--bg); color:var(--ink); font-family:"Inter","Segoe UI",Arial,sans-serif; }
 button,input { font:inherit; }
 button { cursor:pointer; }
 .sip-shell { display:grid; grid-template-columns:194px minmax(0,1fr); min-height:100vh; background:#fff; }
@@ -31,75 +31,6 @@ button { cursor:pointer; }
 .mobile-menu-btn { display:grid; flex-shrink:0; width:34px; height:34px; place-items:center; border:0; border-radius:8px; color:#fff; background:rgba(255,255,255,.1); }
 .mobile-menu-btn:hover { background:rgba(255,255,255,.18); }
 
-@media (max-width:860px) {
-  .sip-shell { display:block; }
-  .sip-main { width:100%; }
-
-  .mobile-topbar {
-    display:flex;
-    position:sticky;
-    top:0;
-    z-index:30;
-    align-items:center;
-    gap:14px;
-    height:56px;
-    padding:0 16px;
-    background:linear-gradient(100deg,#001c41,#00234d);
-    box-shadow:0 2px 10px rgba(0,10,30,.18);
-  }
-
-  /* En escritorio el sidebar es una columna fija de la grilla, siempre a la
-     vista; en celular se convierte en un cajón que entra desde la izquierda
-     encima de todo lo demás, y se queda oculto (fuera de la pantalla) hasta
-     que se abre con el botón de menú. Esto es justo lo que antes faltaba —
-     el sidebar de escritorio se estaba estirando a lo ancho completo de la
-     pantalla en vez de convertirse en esto. */
-  .sip-sidebar {
-    position:fixed;
-    top:0;
-    left:0;
-    z-index:50;
-    width:min(280px,84vw);
-    height:100vh;
-    transform:translateX(-100%);
-    transition:transform .25s ease;
-    box-shadow:14px 0 34px rgba(0,10,30,.35);
-  }
-  .sip-sidebar.open { transform:translateX(0); }
-
-  .sidebar-close {
-    display:grid;
-    position:absolute;
-    top:14px;
-    right:14px;
-    z-index:1;
-    width:30px;
-    height:30px;
-    place-items:center;
-    border:0;
-    border-radius:8px;
-    color:#fff;
-    background:rgba(255,255,255,.12);
-  }
-
-  .sidebar-backdrop {
-    display:block;
-    position:fixed;
-    inset:0;
-    z-index:40;
-    background:rgba(0,10,30,.5);
-  }
-
-  /* El resto de la página (clima/fecha, tarjetas, columna derecha) se
-     acomoda a una sola columna angosta — esto ya existía antes, nomás lo
-     junté aquí con lo del sidebar para que quede todo el ajuste de celular
-     en un solo lugar. */
-  .sip-header { height:auto; padding:16px; flex-wrap:wrap; gap:10px; }
-  .right-rail { grid-template-columns:1fr; }
-  .controls-heading { align-items:flex-start; flex-direction:column; gap:12px; padding:18px 0; }
-  .view-controls { width:100%; }
-  .lamp-board { grid-template-columns:repeat(2,minmax(150px,1fr)); }
-}
 .sip-header { display:flex; align-items:center; justify-content:space-between; height:102px; padding:0 31px; background:#fff; }
 .sip-header h1 { margin:0; font-size:30px; font-weight:800; letter-spacing:-.8px; line-height:1.05; }
 .sip-header p { margin:8px 0 0; color:#4e6080; font-size:14px; }
@@ -178,7 +109,7 @@ button { cursor:pointer; }
 .modal-cancel:hover { background:#f6f9fd; }
 .modal-apply { flex:1; height:42px; border:0; border-radius:9px; background:linear-gradient(90deg,#001b40,#003166); color:#fff; font-size:13px; font-weight:800; }
 .modal-apply:hover { background:linear-gradient(90deg,#00234f,#003f80); }
-.right-rail { display:grid; align-content:start; gap:14px; }.right-rail section { border:1px solid var(--line); border-radius:10px; background:#fff; }.right-rail h2 { margin:0; font-size:14px; }
+.right-rail { display:grid; min-width:0; align-content:start; gap:14px; }.right-rail section { min-width:0; border:1px solid var(--line); border-radius:10px; background:#fff; }.right-rail h2 { margin:0; font-size:14px; }
 .status-card { height:258px; padding:24px 20px 17px; }.status-ring { display:grid; width:120px; height:120px; margin:20px auto 11px; place-items:center; border:10px solid #099d54; border-radius:50%; color:#059653; box-shadow:inset 0 0 0 3px #e8f7ef; transition:border-color .2s,color .2s,box-shadow .2s; }.status-card>strong { display:block; color:#00984a; font-size:11px; font-weight:600; text-align:center; transition:color .2s; }.updated { display:flex; align-items:center; justify-content:space-between; margin-top:15px; color:#385071; font-size:9px; }.updated button { display:grid; padding:0; place-items:center; border:0; color:#0b3768; background:transparent; }
 .status-card.offline .status-ring { border-color:#d81c3f; color:#c0263f; box-shadow:inset 0 0 0 3px #fbe4e8; }.status-card.offline>strong { color:#c0263f; }
 .status-card.pending .status-ring { border-color:#c7cedb; color:#7c8798; box-shadow:inset 0 0 0 3px #eef1f5; }.status-card.pending>strong { color:#7c8798; }
@@ -209,8 +140,92 @@ button { cursor:pointer; }
 .rail-card { padding:20px; }.rail-card ul { margin:17px 0 0; padding:0; list-style:none; }.quick { height:auto; }.quick ul { display:grid; gap:17px; }.quick li { display:flex; align-items:center; justify-content:space-between; font-size:11px; }.quick li span,.quick li b { display:flex; align-items:center; gap:10px; }.quick li svg { width:18px; }.quick li b { font-size:12px; }.blue svg { color:#0875ff; }.green-text svg { color:#00ae59; }.gray-text svg { color:#63738b; }.amber-text svg { color:#f6a800; }
 .activity { min-height:309px; }.activity ul { display:grid; gap:18px; }.activity li { display:grid; grid-template-columns:25px minmax(0,1fr) auto; align-items:center; gap:9px; color:#395170; font-size:10px; }.activity li>i { display:grid; width:22px; height:22px; place-items:center; border-radius:50%; color:#52657e; background:#eef1f3; }.activity li>i svg { width:17px; }.activity li>i.up { color:#00a85d; background:#dcf5e6; }.activity li>i.hand { color:#0871ff; background:#e6f0ff; }.activity time { font-size:8px; font-weight:700; white-space:nowrap; }.activity a { display:flex; align-items:center; justify-content:space-between; margin-top:23px; color:#006cf8; font-size:11px; font-weight:650; text-decoration:none; }.activity-empty { margin:17px 0 0; color:#7c8798; font-size:11px; font-weight:600; }
 
+/* IMPORTANTE: estos @media de aquí para abajo están ordenados a propósito
+   de MÁS ancho a MÁS angosto (1350 → 1050 → 860 → 520). Con "max-width" el
+   CSS no le da prioridad automática al que sea "más específico" — si dos
+   @media aplican al mismo tiempo (por ejemplo, en un celular de 390px
+   aplican los 4), gana el que esté escrito MÁS ABAJO en el archivo, así
+   nomás sea el que se ve "más ancho" en el nombre. Antes el bloque de
+   860px (el del cajón del menú) estaba escrito ANTES que este de 1050px,
+   entonces en CUALQUIER celular (390px, por ejemplo, cae dentro de los dos)
+   ganaba el de 1050px por estar más abajo — eso era lo que dejaba
+   "Estado del sistema" en 3 columnas apretadísimas en vez de 1 sola en el
+   teléfono, y esa columna de 3 no cabía en la pantalla y empujaba todo lo
+   demás (como el relojito de "LOGO Planta 1") fuera del borde derecho.
+   Manteniendo el orden ancho→angosto aquí abajo, el último que aplica es
+   siempre el que le corresponde a pantallas de ese tamaño. */
 @media (max-width:1350px) { .dashboard-content { grid-template-columns:minmax(0,1fr) 245px; padding-inline:16px; }.lamp-board { grid-template-columns:repeat(4,minmax(150px,1fr)); }.header-facts { gap:16px; } }
-@media (max-width:1050px) { .dashboard-content { grid-template-columns:1fr; }.right-rail { grid-template-columns:repeat(3,1fr); }.status-card,.quick { height:auto; }.lamp-board { grid-template-columns:repeat(3,minmax(160px,1fr)); } }
+@media (max-width:1050px) { .dashboard-content { grid-template-columns:1fr; }.right-rail { grid-template-columns:repeat(3,minmax(0,1fr)); }.status-card,.quick { height:auto; }.lamp-board { grid-template-columns:repeat(3,minmax(160px,1fr)); } }
+
+@media (max-width:860px) {
+  .sip-shell { display:block; }
+  .sip-main { width:100%; }
+
+  .mobile-topbar {
+    display:flex;
+    position:sticky;
+    top:0;
+    z-index:30;
+    align-items:center;
+    gap:14px;
+    height:56px;
+    padding:0 16px;
+    background:linear-gradient(100deg,#001c41,#00234d);
+    box-shadow:0 2px 10px rgba(0,10,30,.18);
+  }
+
+  /* En escritorio el sidebar es una columna fija de la grilla, siempre a la
+     vista; en celular se convierte en un cajón que entra desde la izquierda
+     encima de todo lo demás, y se queda oculto (fuera de la pantalla) hasta
+     que se abre con el botón de menú. */
+  .sip-sidebar {
+    position:fixed;
+    top:0;
+    left:0;
+    z-index:50;
+    width:min(280px,84vw);
+    height:100vh;
+    transform:translateX(-100%);
+    transition:transform .25s ease;
+    box-shadow:14px 0 34px rgba(0,10,30,.35);
+  }
+  .sip-sidebar.open { transform:translateX(0); }
+
+  .sidebar-close {
+    display:grid;
+    position:absolute;
+    top:14px;
+    right:14px;
+    z-index:1;
+    width:30px;
+    height:30px;
+    place-items:center;
+    border:0;
+    border-radius:8px;
+    color:#fff;
+    background:rgba(255,255,255,.12);
+  }
+
+  .sidebar-backdrop {
+    display:block;
+    position:fixed;
+    inset:0;
+    z-index:40;
+    background:rgba(0,10,30,.5);
+  }
+
+  /* El resto de la página (clima/fecha, tarjetas, columna derecha) se
+     acomoda a una sola columna angosta. Esta es la que de verdad manda en
+     celulares reales, siempre y cuando esté escrita DESPUÉS del bloque de
+     1050px de arriba (ver la nota grande más arriba) — por eso se movió
+     hasta acá. */
+  .sip-header { height:auto; padding:16px; flex-wrap:wrap; gap:10px; }
+  .right-rail { grid-template-columns:minmax(0,1fr); }
+  .controls-heading { align-items:flex-start; flex-direction:column; gap:12px; padding:18px 0; }
+  .view-controls { width:100%; }
+  .lamp-board { grid-template-columns:repeat(2,minmax(150px,1fr)); }
+}
+
 @media (max-width:520px) { .lamp-board { grid-template-columns:1fr; }.sip-nav { grid-template-columns:1fr; }.dashboard-content { padding:14px 10px 20px; }.sip-header h1 { font-size:25px; } }
 
 /* --- Login --- */
