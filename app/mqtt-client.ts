@@ -92,6 +92,11 @@ type InternalState = {
   // conectados a la vez, los comandos de encendido/apagado empezaran a
   // mandarse en 1/0/1/0 sin parar (ver la nota larga en evaluateSchedule).
   plcLogoTime: Record<number, number>;
+  // Última vez (ms epoch de este servidor, no del LOGO) que llegó un
+  // mensaje de status de CADA PLC por separado — para poder decir "PLC 1
+  // conectado y escuchando" / "PLC 2 desconectado" de forma independiente,
+  // en vez de un solo estado de conexión global para los dos.
+  plcUpdatedAt: Record<number, number>;
 };
 
 declare global {
@@ -119,6 +124,7 @@ const state: InternalState = globalThis.__sipState ?? {
   connected: false,
   logoTime: null,
   plcLogoTime: {},
+  plcUpdatedAt: {},
 };
 globalThis.__sipState = state;
 
@@ -415,6 +421,7 @@ function getClient(): MqttClient {
         }
 
         state.updatedAt = Date.now();
+        state.plcUpdatedAt[plc.id] = Date.now();
 
         // Con la hora y los modos ya actualizados, revisamos si alguna
         // lámpara de ESTE PLC en Automático necesita encender/apagar según
@@ -435,7 +442,7 @@ function getClient(): MqttClient {
 export async function getLampsState(): Promise<{
   lamps: Record<number, LampState>;
   devices: Array<{ id: number; name: string; plcId: number | null }>;
-  plcs: Array<{ id: number; name: string }>;
+  plcs: Array<{ id: number; name: string; connected: boolean; lastSeenAt: number | null; logoTime: number | null }>;
   updatedAt: number | null;
   connected: boolean;
   logoTime: number | null;
@@ -467,7 +474,24 @@ export async function getLampsState(): Promise<{
     .slice()
     .sort((a, b) => a.id - b.id)
     .map((lamp) => ({ id: lamp.id, name: lamp.name, plcId: lamp.plcId }));
-  const plcs = cfg.plcs.map((plc) => ({ id: plc.id, name: plc.name }));
+
+  // Cada PLC ahora manda también SU PROPIO estado de conexión (no uno solo
+  // compartido entre los dos): "conectado" para un PLC = tenemos sesión con
+  // el broker Y ese PLC en particular nos ha escrito en el último minuto.
+  // "logoTime" es la hora que reportó ESE PLC la última vez (ver
+  // plcLogoTime más arriba) — para mostrarla junto a su nombre en el
+  // Dashboard, ahora que cada PLC lleva su propio reloj por separado.
+  const plcs = cfg.plcs.map((plc) => {
+    const lastSeenAt = state.plcUpdatedAt[plc.id] ?? null;
+    const plcFresh = lastSeenAt !== null && Date.now() - lastSeenAt < STALE_AFTER_MS;
+    return {
+      id: plc.id,
+      name: plc.name,
+      connected: state.connected && plcFresh,
+      lastSeenAt,
+      logoTime: state.plcLogoTime[plc.id] ?? null,
+    };
+  });
 
   return {
     lamps,

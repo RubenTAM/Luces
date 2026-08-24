@@ -22,7 +22,13 @@ type Lamp = {
   forced: boolean;
 };
 
-type PlcMeta = { id: number; name: string };
+type PlcMeta = {
+  id: number;
+  name: string;
+  connected: boolean;
+  lastSeenAt: number | null;
+  logoTime: number | null;
+};
 
 const PLACEHOLDER = "----";
 
@@ -69,7 +75,6 @@ export function LampDashboard() {
   const [lamps, setLamps] = useState<Lamp[]>([]);
   const [plcs, setPlcs] = useState<PlcMeta[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [connected, setConnected] = useState<boolean | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [logoTime, setLogoTime] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -88,7 +93,6 @@ export function LampDashboard() {
         const response = await fetch("/api/lamps", { cache: "no-store" });
         if (!response.ok || cancelled) return;
         const data = await response.json();
-        setConnected(Boolean(data.connected));
         setLastUpdated(new Date());
         if (typeof data.logoTime === "number") setLogoTime(data.logoTime);
 
@@ -111,7 +115,11 @@ export function LampDashboard() {
         setPlcs(data.plcs ?? []);
         setLoaded(true);
       } catch {
-        if (!cancelled) setConnected(false);
+        // No se pudo ni siquiera hablar con nuestro propio servidor (no es
+        // lo mismo que el servidor esté conectado al broker) — marcamos
+        // todos los PLCs como desconectados para no dejar un estado viejo
+        // ("Conectado") pegado en pantalla mientras esto sigue fallando.
+        if (!cancelled) setPlcs((current) => current.map((plc) => ({ ...plc, connected: false })));
       } finally {
         if (!cancelled) setLoaded(true);
       }
@@ -126,7 +134,6 @@ export function LampDashboard() {
   const autoCount = lamps.filter((lamp) => lamp.mode === "AUTO").length;
   const onCount = lamps.filter((lamp) => lamp.isOn).length;
   const offCount = lamps.filter((lamp) => lamp.mode !== null).length - onCount;
-  const systemStatus = connected === false ? "offline" : connected === null ? "pending" : "online";
 
   // Agrupa las lámparas por PLC, en el mismo orden en que vienen los PLCs
   // del servidor, para poner un encabezado con el nombre de cada PLC (el
@@ -137,7 +144,10 @@ export function LampDashboard() {
     .filter((group) => group.items.length > 0);
   const orphanLamps = lamps.filter((lamp) => !plcs.some((plc) => plc.id === lamp.plcId));
   if (orphanLamps.length > 0) {
-    groupedByPlc.push({ plc: { id: -1, name: "Sin PLC asignado" }, items: orphanLamps });
+    groupedByPlc.push({
+      plc: { id: -1, name: "Sin PLC asignado", connected: false, lastSeenAt: null, logoTime: null },
+      items: orphanLamps,
+    });
   }
 
   const openEdit = (lamp: Lamp, which: "on" | "off") => {
@@ -190,7 +200,7 @@ export function LampDashboard() {
     <section className="sip-main">
       <header className="sip-header">
         <div><h1>Control de Lámparas</h1><p>Resumen del sistema</p></div>
-        <div className="header-facts"><span><Icon name="sun"/>23 °C</span><span><Icon name="calendar"/>{logoDateTime ? logoDateTime.date : "—"}</span><span><Icon name="clock"/>{logoDateTime ? logoDateTime.time : "—"}</span><i/><span className={connected === false ? "status-disconnected" : ""}><b className={`connected-dot ${connected === false ? "off" : connected === null ? "pending" : ""}`}/>{connected === null ? "Verificando…" : connected ? "Conectado" : "Desconectado"}</span></div>
+        <div className="header-facts"><span><Icon name="sun"/>23 °C</span><span><Icon name="calendar"/>{logoDateTime ? logoDateTime.date : "—"}</span></div>
       </header>
 
       <div className="dashboard-content">
@@ -203,7 +213,14 @@ export function LampDashboard() {
           <section className="lamp-groups" aria-label="Control de lámparas">
             {groupedByPlc.map((group) => (
               <div className="plc-group" key={group.plc.id}>
-                <h3 className="plc-group-heading">{group.plc.name}</h3>
+                <h3 className="plc-group-heading">
+                  <span className="plc-group-name">{group.plc.name}</span>
+                  {group.plc.logoTime !== null && (
+                    <span className="plc-group-time">
+                      <Icon name="clock" size={13}/>{formatLogoDateTime(group.plc.logoTime).time}
+                    </span>
+                  )}
+                </h3>
                 <div className="lamp-board">
                   {group.items.map((lamp) => {
                     const hasData = lamp.mode !== null;
@@ -238,10 +255,26 @@ export function LampDashboard() {
         </section>
 
         <aside className="right-rail">
-          <section className={`status-card ${systemStatus !== "online" ? systemStatus : ""}`}>
+          <section className="status-card multi">
             <h2>Estado del sistema</h2>
-            <div className="status-ring"><Icon name={systemStatus === "offline" ? "close" : systemStatus === "pending" ? "clock" : "check"} size={45}/></div>
-            <strong>{systemStatus === "offline" ? "Desconectado del broker" : systemStatus === "pending" ? "Verificando conexión…" : "Todo funcionando correctamente"}</strong>
+            <div className="status-plc-grid">
+              {plcs.map((plc, index) => {
+                const tone = plc.connected ? "" : plc.lastSeenAt === null ? "pending" : "offline";
+                const label = plc.connected ? "Conectado" : plc.lastSeenAt === null ? "Verificando…" : "Desconectado";
+                return (
+                  <div className={`status-plc ${tone}`} key={plc.id}>
+                    <div className="status-plc-ring">
+                      <Icon name={tone === "offline" ? "close" : tone === "pending" ? "clock" : "check"} size={18}/>
+                    </div>
+                    <div className="status-plc-info">
+                      <strong>Estado sistema {plc.name} <span className="status-plc-ordinal">(Sistema {index + 1})</span></strong>
+                      <span className="status-plc-state">{label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {plcs.length === 0 && <p className="status-plc-empty">No hay PLCs configurados todavía.</p>}
+            </div>
             <div className="updated"><span>Última actualización: {lastUpdated ? formatClockTime(lastUpdated) : "—"}</span><button type="button" aria-label="Actualizar" onClick={() => window.location.reload()}><Icon name="refresh" size={17}/></button></div>
           </section>
           <section className="rail-card quick"><h2>Resumen rápido</h2><ul><li><span className="blue"><Icon name="lamp"/>Total de lámparas en automático</span><b>{autoCount}</b></li><li><span className="green-text"><Icon name="power"/>Encendidas</span><b>{onCount}</b></li><li><span className="gray-text"><Icon name="power"/>Apagadas</span><b>{offCount}</b></li></ul></section>

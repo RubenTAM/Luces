@@ -36,8 +36,10 @@ button { cursor:pointer; }
 .controls-heading h2 { display:flex; align-items:center; gap:12px; margin:0; font-size:18px; }.controls-heading h2>span { width:5px; height:22px; border-radius:5px; background:#0c72ff; }
 .view-controls { display:flex; align-items:center; height:36px; }.view-controls button { display:grid; width:51px; height:36px; place-items:center; border:1px solid var(--line); color:#002957; background:#fff; }.view-controls button:first-of-type { border-radius:8px 0 0 8px; }.view-controls button:last-child { border-left:0; border-radius:0 8px 8px 0; }.view-controls button.selected { color:#066fff; background:#eaf2ff; }
 .lamp-groups { display:flex; flex-direction:column; gap:22px; }
-.plc-group-heading { margin:0 0 10px; font-size:15px; font-weight:700; color:#002957; display:flex; align-items:center; gap:8px; }
-.plc-group-heading::before { content:""; width:5px; height:16px; border-radius:5px; background:#0c72ff; }
+.plc-group-heading { margin:0 0 10px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.plc-group-name { display:flex; align-items:center; gap:8px; font-size:15px; font-weight:700; color:#002957; }
+.plc-group-name::before { content:""; width:5px; height:16px; border-radius:5px; background:#0c72ff; flex-shrink:0; }
+.plc-group-time { display:flex; align-items:center; gap:5px; padding:4px 11px; border-radius:999px; background:#eef1f5; color:#4e6080; font-size:12px; font-weight:650; white-space:nowrap; }
 .lamp-board-empty { margin:0; padding:24px; border:1px dashed var(--line); border-radius:10px; color:#6b7686; text-align:center; }
 .lamp-board { display:grid; grid-template-columns:repeat(5,minmax(150px,1fr)); gap:10px; }
 .sip-card { display:flex; min-width:0; height:auto; min-height:190px; flex-direction:column; padding:18px 19px 17px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 2px 7px rgba(5,27,60,.025); }
@@ -95,6 +97,25 @@ button { cursor:pointer; }
 .status-card { height:258px; padding:24px 20px 17px; }.status-ring { display:grid; width:120px; height:120px; margin:20px auto 11px; place-items:center; border:10px solid #099d54; border-radius:50%; color:#059653; box-shadow:inset 0 0 0 3px #e8f7ef; transition:border-color .2s,color .2s,box-shadow .2s; }.status-card>strong { display:block; color:#00984a; font-size:11px; font-weight:600; text-align:center; transition:color .2s; }.updated { display:flex; align-items:center; justify-content:space-between; margin-top:15px; color:#385071; font-size:9px; }.updated button { display:grid; padding:0; place-items:center; border:0; color:#0b3768; background:transparent; }
 .status-card.offline .status-ring { border-color:#d81c3f; color:#c0263f; box-shadow:inset 0 0 0 3px #fbe4e8; }.status-card.offline>strong { color:#c0263f; }
 .status-card.pending .status-ring { border-color:#c7cedb; color:#7c8798; box-shadow:inset 0 0 0 3px #eef1f5; }.status-card.pending>strong { color:#7c8798; }
+
+/* Estado del sistema dividido en un mini-panel por PLC (en vez de un solo
+   círculo grande compartido) — cada PLC confirma por separado si está
+   conectado y escuchando datos del broker. */
+.status-card.multi { height:auto; padding:20px; }
+.status-plc-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px; }
+.status-plc { display:flex; align-items:center; gap:10px; padding:12px 11px; border:1px solid var(--line); border-radius:10px; background:#fafbfc; transition:border-color .2s,background .2s; }
+.status-plc-ring { display:grid; flex-shrink:0; width:38px; height:38px; place-items:center; border:4px solid #099d54; border-radius:50%; color:#059653; background:#fff; box-shadow:inset 0 0 0 2px #e8f7ef; transition:border-color .2s,color .2s,box-shadow .2s; }
+.status-plc-info { display:grid; gap:3px; min-width:0; }
+.status-plc-info strong { font-size:11.5px; font-weight:800; line-height:1.3; color:var(--ink); }
+.status-plc-ordinal { font-weight:600; color:#7c8798; }
+.status-plc-state { font-size:10.5px; font-weight:700; color:#00984a; }
+.status-plc.offline { background:#fdf3f5; border-color:#f3c9d2; }
+.status-plc.offline .status-plc-ring { border-color:#d81c3f; color:#c0263f; box-shadow:inset 0 0 0 2px #fbe4e8; }
+.status-plc.offline .status-plc-state { color:#c0263f; }
+.status-plc.pending .status-plc-ring { border-color:#c7cedb; color:#7c8798; box-shadow:inset 0 0 0 2px #eef1f5; }
+.status-plc.pending .status-plc-state { color:#7c8798; }
+.status-plc-empty { grid-column:1 / -1; margin:0; padding:14px; color:#7c8798; font-size:12px; text-align:center; }
+@media (max-width:1350px) { .status-plc-grid { grid-template-columns:1fr; } }
 .rail-card { padding:20px; }.rail-card ul { margin:17px 0 0; padding:0; list-style:none; }.quick { height:auto; }.quick ul { display:grid; gap:17px; }.quick li { display:flex; align-items:center; justify-content:space-between; font-size:11px; }.quick li span,.quick li b { display:flex; align-items:center; gap:10px; }.quick li svg { width:18px; }.quick li b { font-size:12px; }.blue svg { color:#0875ff; }.green-text svg { color:#00ae59; }.gray-text svg { color:#63738b; }.amber-text svg { color:#f6a800; }
 .activity { min-height:309px; }.activity ul { display:grid; gap:18px; }.activity li { display:grid; grid-template-columns:25px minmax(0,1fr) auto; align-items:center; gap:9px; color:#395170; font-size:10px; }.activity li>i { display:grid; width:22px; height:22px; place-items:center; border-radius:50%; color:#52657e; background:#eef1f3; }.activity li>i svg { width:17px; }.activity li>i.up { color:#00a85d; background:#dcf5e6; }.activity li>i.hand { color:#0871ff; background:#e6f0ff; }.activity time { font-size:8px; font-weight:700; white-space:nowrap; }.activity a { display:flex; align-items:center; justify-content:space-between; margin-top:23px; color:#006cf8; font-size:11px; font-weight:650; text-decoration:none; }.activity-empty { margin:17px 0 0; color:#7c8798; font-size:11px; font-weight:600; }
 
