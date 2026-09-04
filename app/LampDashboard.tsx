@@ -18,6 +18,14 @@ type Lamp = {
   mode: Mode | null;
   onTime: string;
   offTime: string;
+  // Horario de sábado y domingo tal cual está guardado (no cambia según el
+  // día de hoy) — lo usa el modal del ícono de lápiz.
+  weekendOnTime: string;
+  weekendOffTime: string;
+  // true si, según el reloj del PLC de esta lámpara, hoy es sábado o
+  // domingo: onTime/offTime de arriba ya vienen del servidor como el
+  // horario de fin de semana en ese caso.
+  isWeekendToday: boolean;
   isOn: boolean | null;
   forced: boolean;
 };
@@ -69,7 +77,12 @@ function formatLogoDateTime(epochSeconds: number) {
   return { date: readable, time };
 }
 
-type EditState = { lampId: number; which: "on" | "off"; hour: string; minute: string };
+type EditState = { lampId: number; which: "on" | "off"; scope: "weekday" | "weekend"; hour: string; minute: string };
+
+// El modal del ícono de lápiz edita las dos horas de sábado/domingo juntas
+// (no una por una como el de arriba), porque lo que se quiere ver de un
+// jalón es "cuál es el horario completo de fin de semana".
+type WeekendEditState = { lampId: number; onHour: string; onMinute: string; offHour: string; offMinute: string };
 
 export function LampDashboard() {
   const [lamps, setLamps] = useState<Lamp[]>([]);
@@ -78,6 +91,7 @@ export function LampDashboard() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [logoTime, setLogoTime] = useState<number | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  const [weekendEditState, setWeekendEditState] = useState<WeekendEditState | null>(null);
 
   // Las lámparas están conectadas a uno o más LOGO de Siemens vía MQTT: el
   // estado de encendido y el modo ya no se manejan en la app, vienen del
@@ -106,6 +120,9 @@ export function LampDashboard() {
               plcId: device.plcId,
               onTime: reported?.onTime ?? "18:00",
               offTime: reported?.offTime ?? "06:00",
+              weekendOnTime: reported?.weekendOnTime ?? "18:00",
+              weekendOffTime: reported?.weekendOffTime ?? "06:00",
+              isWeekendToday: reported?.isWeekendToday ?? false,
               isOn: reported?.isOn ?? null,
               mode: reported?.mode ?? null,
               forced: reported?.forced ?? false,
@@ -150,9 +167,21 @@ export function LampDashboard() {
     });
   }
 
+  // El botón de Encendido/Apagado de la tarjeta edita SIEMPRE el horario
+  // que se está mostrando ahí mismo: entre semana es el de lunes a viernes,
+  // y en sábado/domingo es el de fin de semana (lamp.isWeekendToday ya lo
+  // dice) — así nunca se edita un horario distinto al que se ve en pantalla.
   const openEdit = (lamp: Lamp, which: "on" | "off") => {
     const [hour, minute] = (which === "on" ? lamp.onTime : lamp.offTime).split(":");
-    setEditState({ lampId: lamp.id, which, hour, minute });
+    setEditState({ lampId: lamp.id, which, scope: lamp.isWeekendToday ? "weekend" : "weekday", hour, minute });
+  };
+
+  // El ícono de lápiz siempre abre el horario de sábado y domingo, sin
+  // importar qué día sea hoy — para poder dejarlo listo desde entre semana.
+  const openWeekendEdit = (lamp: Lamp) => {
+    const [onHour, onMinute] = lamp.weekendOnTime.split(":");
+    const [offHour, offMinute] = lamp.weekendOffTime.split(":");
+    setWeekendEditState({ lampId: lamp.id, onHour, onMinute, offHour, offMinute });
   };
 
   const applyEdit = () => {
@@ -160,12 +189,20 @@ export function LampDashboard() {
     const hour = clamp(parseInt(editState.hour || "0", 10) || 0, 0, 23);
     const minute = clamp(parseInt(editState.minute || "0", 10) || 0, 0, 59);
     const time = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-    const { lampId, which } = editState;
+    const { lampId, which, scope } = editState;
 
     // Actualizamos la tarjeta al instante (no esperamos al próximo poll de
     // 3s) para que no se vea la hora vieja unos segundos antes de refrescar.
+    // Si se editó el horario de fin de semana, también se actualiza
+    // weekendOnTime/weekendOffTime (lo usa el modal del lápiz) además de
+    // onTime/offTime, que es lo que se ve en la tarjeta mientras hoy sea
+    // sábado o domingo.
     setLamps((current) => current.map((lamp) => {
       if (lamp.id !== lampId) return lamp;
+      if (scope === "weekend") {
+        const next = which === "on" ? { ...lamp, weekendOnTime: time } : { ...lamp, weekendOffTime: time };
+        return lamp.isWeekendToday ? { ...next, [which === "on" ? "onTime" : "offTime"]: time } : next;
+      }
       return which === "on" ? { ...lamp, onTime: time } : { ...lamp, offTime: time };
     }));
 
@@ -176,10 +213,47 @@ export function LampDashboard() {
     fetch("/api/lamps", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lampId, which, time }),
+      body: JSON.stringify({ lampId, which, time, scope }),
     }).catch(() => {});
 
     setEditState(null);
+  };
+
+  // Aplica las dos horas de sábado/domingo juntas (Encendido y Apagado del
+  // modal del lápiz), con dos POST — uno por cada una — pero con el mismo
+  // "scope: weekend" para que el servidor las guarde en
+  // weekendOnTime/weekendOffTime y no toque el horario de lunes a viernes.
+  const applyWeekendEdit = () => {
+    if (!weekendEditState) return;
+    const onHour = clamp(parseInt(weekendEditState.onHour || "0", 10) || 0, 0, 23);
+    const onMinute = clamp(parseInt(weekendEditState.onMinute || "0", 10) || 0, 0, 59);
+    const offHour = clamp(parseInt(weekendEditState.offHour || "0", 10) || 0, 0, 23);
+    const offMinute = clamp(parseInt(weekendEditState.offMinute || "0", 10) || 0, 0, 59);
+    const onTime = `${onHour.toString().padStart(2, "0")}:${onMinute.toString().padStart(2, "0")}`;
+    const offTime = `${offHour.toString().padStart(2, "0")}:${offMinute.toString().padStart(2, "0")}`;
+    const { lampId } = weekendEditState;
+
+    setLamps((current) => current.map((lamp) => {
+      if (lamp.id !== lampId) return lamp;
+      const next = { ...lamp, weekendOnTime: onTime, weekendOffTime: offTime };
+      // Si hoy ya es sábado/domingo, la tarjeta está mostrando este mismo
+      // horario ahorita mismo: se refleja también en onTime/offTime para
+      // no dejar la hora vieja unos segundos en pantalla.
+      return lamp.isWeekendToday ? { ...next, onTime, offTime } : next;
+    }));
+
+    fetch("/api/lamps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lampId, which: "on", time: onTime, scope: "weekend" }),
+    }).catch(() => {});
+    fetch("/api/lamps", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lampId, which: "off", time: offTime, scope: "weekend" }),
+    }).catch(() => {});
+
+    setWeekendEditState(null);
   };
 
   const forcePower = (lamp: Lamp) => {
@@ -278,9 +352,19 @@ export function LampDashboard() {
                           <small className="readonly">{hasData ? `Modo: ${lamp.mode === "AUTO" ? "Automático" : "Manual"}` : `Modo: ${PLACEHOLDER}`}</small>
                         </span>
                       </button>
+                      <div className="schedule-scope">{hasData ? (lamp.isWeekendToday ? "Horario de fin de semana (sáb-dom)" : "Horario de lunes a viernes") : PLACEHOLDER}</div>
                       <div className="schedule-row">
                         <button type="button" className="schedule-col" disabled={!hasData} onClick={() => openEdit(lamp, "on")} aria-label={`Cambiar hora de encendido de ${lamp.name}`}><span className="label">Encendido</span><span className="value">{hasData ? formatTime(lamp.onTime) : PLACEHOLDER}</span></button>
-                        <span className="schedule-dot">•</span>
+                        <button
+                          type="button"
+                          className="schedule-edit-weekend"
+                          disabled={!hasData}
+                          onClick={() => openWeekendEdit(lamp)}
+                          aria-label={`Configurar horario de sábado y domingo de ${lamp.name}`}
+                          title="Horario de sábado y domingo"
+                        >
+                          <Icon name="pencil" size={13}/>
+                        </button>
                         <button type="button" className="schedule-col" disabled={!hasData} onClick={() => openEdit(lamp, "off")} aria-label={`Cambiar hora de apagado de ${lamp.name}`}><span className="label">Apagado</span><span className="value">{hasData ? formatTime(lamp.offTime) : PLACEHOLDER}</span></button>
                       </div>
                     </article>;
@@ -326,6 +410,50 @@ export function LampDashboard() {
         </aside>
       </div>
     </section>
+
+    {weekendEditState && (
+      <div className="modal-backdrop" onClick={() => setWeekendEditState(null)}>
+        <div className="modal-box" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-head">
+            <h3>Horario de sábado y domingo — {lamps.find((lamp) => lamp.id === weekendEditState.lampId)?.name ?? `Lámpara ${weekendEditState.lampId}`}</h3>
+            <button type="button" className="modal-close" onClick={() => setWeekendEditState(null)} aria-label="Cerrar"><Icon name="close" size={15}/></button>
+          </div>
+          <p className="modal-hint">El horario que se ve en la tarjeta (Encendido/Apagado) es el de lunes a viernes. Aquí defines el horario aparte para sábado y domingo.</p>
+          <div className="modal-weekend-row">
+            <span className="modal-weekend-label">Encendido</span>
+            <div className="modal-body">
+              <label className="modal-field">
+                <span>Horas</span>
+                <input type="number" inputMode="numeric" min={0} max={23} value={weekendEditState.onHour} onChange={(event) => setWeekendEditState({ ...weekendEditState, onHour: event.target.value })}/>
+              </label>
+              <span className="modal-colon">:</span>
+              <label className="modal-field">
+                <span>Minutos</span>
+                <input type="number" inputMode="numeric" min={0} max={59} value={weekendEditState.onMinute} onChange={(event) => setWeekendEditState({ ...weekendEditState, onMinute: event.target.value })}/>
+              </label>
+            </div>
+          </div>
+          <div className="modal-weekend-row">
+            <span className="modal-weekend-label">Apagado</span>
+            <div className="modal-body">
+              <label className="modal-field">
+                <span>Horas</span>
+                <input type="number" inputMode="numeric" min={0} max={23} value={weekendEditState.offHour} onChange={(event) => setWeekendEditState({ ...weekendEditState, offHour: event.target.value })}/>
+              </label>
+              <span className="modal-colon">:</span>
+              <label className="modal-field">
+                <span>Minutos</span>
+                <input type="number" inputMode="numeric" min={0} max={59} value={weekendEditState.offMinute} onChange={(event) => setWeekendEditState({ ...weekendEditState, offMinute: event.target.value })}/>
+              </label>
+            </div>
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="modal-cancel" onClick={() => setWeekendEditState(null)}>Cancelar</button>
+            <button type="button" className="modal-apply" onClick={applyWeekendEdit}>Aplicar</button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {editState && (
       <div className="modal-backdrop" onClick={() => setEditState(null)}>

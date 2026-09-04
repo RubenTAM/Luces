@@ -22,8 +22,24 @@ const SCHEDULE_TOPIC = "sip/dashboard/schedule";
 // invalidateMqttConfigCache más abajo).
 
 export type LampState = {
+  // onTime/offTime son el horario EFECTIVO de hoy: entre semana son el
+  // horario de lunes a viernes, y en sábado/domingo son el de fin de
+  // semana (weekendOnTime/weekendOffTime) — así la tarjeta, al llegar el
+  // sábado, muestra sola el horario de fin de semana, y al volver el lunes
+  // vuelve a mostrar el de lunes a viernes, sin que nadie tenga que hacer
+  // nada.
   onTime: string;
   offTime: string;
+  // Horario de sábado y domingo tal cual está guardado (no cambia según el
+  // día): lo usa el modal del ícono de lápiz para poder configurarlo desde
+  // cualquier día de la semana.
+  weekendOnTime: string;
+  weekendOffTime: string;
+  // true si, según el reloj del PLC de esta lámpara, hoy es sábado o
+  // domingo — le dice al frontend si onTime/offTime de arriba son el
+  // horario de fin de semana o el de entre semana, y a cuál de los dos
+  // debe editar si el usuario le pica a "Encendido"/"Apagado" en la tarjeta.
+  isWeekendToday: boolean;
   isOn: boolean | null;
   mode: "AUTO" | "MAN" | null;
   // true = alguien forzó el encendido/apagado desde el dashboard: el horario
@@ -39,6 +55,11 @@ type ReportedLampState = {
 type ScheduleEntry = {
   onTime: string;
   offTime: string;
+  // Horario de sábado y domingo (fin de semana), separado del horario de
+  // lunes a viernes de arriba. Se edita desde el ícono de lápiz en la
+  // tarjeta, sin importar qué día sea hoy.
+  weekendOnTime: string;
+  weekendOffTime: string;
 };
 
 type LampConfig = {
@@ -108,6 +129,12 @@ type InternalState = {
   // conectado y escuchando" / "PLC 2 desconectado" de forma independiente,
   // en vez de un solo estado de conexión global para los dos.
   plcUpdatedAt: Record<number, number>;
+  // Último estado de conexión YA REGISTRADO en Historial para cada PLC
+  // (true/false), para poder detectar cuándo CAMBIA y anotar el evento una
+  // sola vez — no en cada revisión. undefined = todavía no se sabe (recién
+  // arrancó el servidor), para no soltar un evento falso de "se conectó" en
+  // cuanto arranca. Ver checkPlcConnectivity() más abajo.
+  plcConnected: Record<number, boolean>;
 };
 
 declare global {
@@ -121,6 +148,8 @@ declare global {
   var __sipConfigLoading: Promise<ConfigSnapshot> | undefined;
   // eslint-disable-next-line no-var
   var __sipSubscribedTopics: Set<string> | undefined;
+  // eslint-disable-next-line no-var
+  var __sipConnectivityWatcher: ReturnType<typeof setInterval> | undefined;
 }
 
 // Se guarda en globalThis (igual que el cliente MQTT) para que sobreviva a
@@ -137,6 +166,7 @@ const state: InternalState = globalThis.__sipState ?? {
   logoTime: null,
   plcLogoTime: {},
   plcUpdatedAt: {},
+  plcConnected: {},
 };
 globalThis.__sipState = state;
 
@@ -156,7 +186,7 @@ const CONFIG_TTL_MS = 15_000;
 
 function ensureLampDefaults(id: number) {
   if (!state.reported[id]) state.reported[id] = { isOn: null, mode: null };
-  if (!state.schedule[id]) state.schedule[id] = { onTime: "18:00", offTime: "06:00" };
+  if (!state.schedule[id]) state.schedule[id] = { onTime: "18:00", offTime: "06:00", weekendOnTime: "18:00", weekendOffTime: "06:00" };
   if (!(id in state.commandedOn)) state.commandedOn[id] = null;
   if (!(id in state.commandedAt)) state.commandedAt[id] = 0;
   if (!(id in state.forced)) state.forced[id] = false;
@@ -177,12 +207,28 @@ function logoMinutesOfDay(epochSeconds: number): number {
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
+// Día de la semana (0=domingo … 6=sábado) según $logotime, con el mismo
+// criterio "sin ajuste de zona horaria" que logoMinutesOfDay de arriba —
+// para que el día no se calcule con un huso distinto al de la hora que ya
+// se usa para decidir encendido/apagado.
+function logoDayOfWeek(epochSeconds: number): number {
+  return new Date(epochSeconds * 1000).getUTCDay();
+}
+
+function isWeekendDay(dayOfWeek: number): boolean {
+  return dayOfWeek === 0 || dayOfWeek === 6;
+}
+
 // true si "now" cae dentro de la ventana [onTime, offTime), soportando
 // horarios que cruzan medianoche (ej. enciende 18:00, apaga 06:00).
 function isWithinSchedule(logoTimeSeconds: number, entry: ScheduleEntry): boolean {
   const now = logoMinutesOfDay(logoTimeSeconds);
-  const on = minutesOfDay(entry.onTime);
-  const off = minutesOfDay(entry.offTime);
+  // Sábado y domingo usan weekendOnTime/weekendOffTime en vez del horario
+  // de lunes a viernes — el mismo día (según el reloj de ESTE PLC) que ya
+  // se usa para decidir la hora del día de arriba.
+  const weekend = isWeekendDay(logoDayOfWeek(logoTimeSeconds));
+  const on = minutesOfDay(weekend ? entry.weekendOnTime : entry.onTime);
+  const off = minutesOfDay(weekend ? entry.weekendOffTime : entry.offTime);
   if (on === off) return false;
   if (on < off) return now >= on && now < off;
   return now >= on || now < off;
@@ -203,6 +249,42 @@ function recordEvent(lampId: number | null, lampName: string, message: string) {
   Promise.resolve(db.insert(lampEvents).values({ lampId, lampName, message })).catch((err) => {
     console.error("[historial] no se pudo guardar el evento:", err);
   });
+}
+
+// Cada cuánto se revisa si algún PLC se desconectó o volvió a conectar, para
+// anotarlo en Historial. No hace falta que sea muy seguido: nomás define qué
+// tan rápido nos damos cuenta de una desconexión (además de STALE_AFTER_MS,
+// que ya de por sí tarda un minuto en confirmar que un PLC dejó de escribir).
+const CONNECTIVITY_CHECK_MS = 15_000;
+
+// Revisa la conexión de cada PLC (misma cuenta que usa el Dashboard: sesión
+// con el broker Y un mensaje de status reciente de ESE PLC) y, si cambió
+// desde la última revisión, lo anota en Historial con la hora de este
+// momento. No hay un evento nativo de MQTT que avise "este LOGO en
+// particular se desconectó" — el broker solo sabe de la sesión del
+// SERVIDOR con HiveMQ, no de cada PLC — así que esto se infiere igual que
+// en el Dashboard: si ya pasó más de un minuto sin noticias de un PLC, se
+// considera desconectado. La primera vez que corre (recién arrancado el
+// servidor) solo guarda el estado inicial, sin generar un evento falso.
+function checkPlcConnectivity() {
+  const cfg = globalThis.__sipConfigSnapshot;
+  if (!cfg) return;
+  const now = Date.now();
+  for (const plc of cfg.plcs) {
+    const lastSeenAt = state.plcUpdatedAt[plc.id] ?? null;
+    const fresh = lastSeenAt !== null && now - lastSeenAt < STALE_AFTER_MS;
+    const isConnected = state.connected && fresh;
+    const prev = state.plcConnected[plc.id];
+
+    if (prev === undefined) {
+      state.plcConnected[plc.id] = isConnected;
+      continue;
+    }
+    if (prev === isConnected) continue;
+
+    state.plcConnected[plc.id] = isConnected;
+    recordEvent(null, plc.name, isConnected ? "Recuperó la conexión con el broker" : "Se desconectó del broker");
+  }
 }
 
 // Publica el horario completo como mensaje retained en SCHEDULE_TOPIC, para
@@ -227,7 +309,13 @@ function loadPersistedSchedule(payload: Buffer) {
       const entry = data[key];
       if (entry && TIME_RE.test(entry.onTime) && TIME_RE.test(entry.offTime)) {
         ensureLampDefaults(id);
-        state.schedule[id] = { onTime: entry.onTime, offTime: entry.offTime };
+        // Mensajes retenidos guardados antes de que existiera el horario de
+        // fin de semana no traen weekendOnTime/weekendOffTime — en ese caso
+        // se usa el mismo horario de lunes a viernes como valor inicial,
+        // para no dejarlo en blanco la primera vez que se lee.
+        const weekendOnTime = TIME_RE.test(entry.weekendOnTime) ? entry.weekendOnTime : entry.onTime;
+        const weekendOffTime = TIME_RE.test(entry.weekendOffTime) ? entry.weekendOffTime : entry.offTime;
+        state.schedule[id] = { onTime: entry.onTime, offTime: entry.offTime, weekendOnTime, weekendOffTime };
       }
     }
   } catch (err) {
@@ -464,6 +552,15 @@ function getClient(): MqttClient {
     });
 
     globalThis.__sipMqttClient = client;
+
+    // Revisa cada PLC cada CONNECTIVITY_CHECK_MS y anota en Historial cuando
+    // alguno se desconecta o vuelve a conectar. Guardado en globalThis por
+    // lo mismo que el cliente MQTT: para que sobreviva a Fast Refresh en
+    // desarrollo y no se dupliquen los intervalos (eso generaría eventos
+    // repetidos en Historial).
+    if (!globalThis.__sipConnectivityWatcher) {
+      globalThis.__sipConnectivityWatcher = setInterval(checkPlcConnectivity, CONNECTIVITY_CHECK_MS);
+    }
   }
   return globalThis.__sipMqttClient;
 }
@@ -485,9 +582,18 @@ export async function getLampsState(): Promise<{
     ensureLampDefaults(lamp.id);
     const reported = state.reported[lamp.id];
     const schedule = state.schedule[lamp.id];
+    // "Hoy es fin de semana" se decide con el reloj del PLC AL QUE
+    // PERTENECE esta lámpara (mismo criterio que evaluateSchedule), no con
+    // la hora de quien esté viendo el Dashboard — si todavía no tenemos la
+    // hora de ese PLC, se asume entre semana por default.
+    const plcTime = lamp.plcId !== null ? state.plcLogoTime[lamp.plcId] : undefined;
+    const isWeekendToday = plcTime !== undefined && isWeekendDay(logoDayOfWeek(plcTime));
     lamps[lamp.id] = {
-      onTime: schedule.onTime,
-      offTime: schedule.offTime,
+      onTime: isWeekendToday ? schedule.weekendOnTime : schedule.onTime,
+      offTime: isWeekendToday ? schedule.weekendOffTime : schedule.offTime,
+      weekendOnTime: schedule.weekendOnTime,
+      weekendOffTime: schedule.weekendOffTime,
+      isWeekendToday,
       isOn: reported.isOn,
       mode: reported.mode,
       forced: state.forced[lamp.id] ?? false,
@@ -538,9 +644,12 @@ export async function getLampsState(): Promise<{
 // Guarda el horario de encendido/apagado de una lámpara EN ESTE SERVIDOR
 // (ya no se le manda al LOGO) y re-evalúa de inmediato por si ya toca
 // encender/apagar con el nuevo horario.
-export async function setLampSchedule(id: number, which: "on" | "off", time: string): Promise<void> {
+export async function setLampSchedule(id: number, which: "on" | "off", time: string, scope: "weekday" | "weekend" = "weekday"): Promise<void> {
   ensureLampDefaults(id);
-  state.schedule[id][which === "on" ? "onTime" : "offTime"] = time;
+  const key = scope === "weekend"
+    ? (which === "on" ? "weekendOnTime" : "weekendOffTime")
+    : (which === "on" ? "onTime" : "offTime");
+  state.schedule[id][key] = time;
 
   const client = getClient();
   persistSchedule(client);

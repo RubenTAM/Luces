@@ -35,7 +35,11 @@ export async function POST(request: Request) {
     if (!/^\d{2}:\d{2}$/.test(body.time)) {
       return NextResponse.json({ error: "Formato de hora inválido, se espera HH:MM" }, { status: 400 });
     }
-    await setLampSchedule(lampId, body.which, body.time);
+    // "scope" distingue si se está editando el horario de lunes a viernes
+    // (default, para no romper llamadas viejas que no lo mandan) o el de
+    // sábado y domingo, capturado desde el ícono de lápiz de la tarjeta.
+    const scope = body.scope === "weekend" ? "weekend" : "weekday";
+    await setLampSchedule(lampId, body.which, body.time, scope);
     return NextResponse.json({ ok: true });
   }
 

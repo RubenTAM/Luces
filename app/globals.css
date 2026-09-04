@@ -57,7 +57,7 @@ button { cursor:pointer; }
 .sip-card.disabled { background:#fafbfc; box-shadow:none; }
 .sip-card.disabled .card-head h3,.sip-card.disabled .status-text b,.sip-card.disabled .schedule-col .value { color:#a7b0bd; }
 .sip-card.disabled .status-icon { color:#b7c0cc; background:#f1f3f5; }
-.sip-card.disabled .power-toggle,.sip-card.disabled .schedule-col { cursor:default; }
+.sip-card.disabled .power-toggle,.sip-card.disabled .schedule-col,.sip-card.disabled .schedule-edit-weekend { cursor:default; }
 .sip-card.disabled .schedule-col:hover .value { color:#a7b0bd; }
 .card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:15px; }
 .card-head h3 { margin:0; font-size:16px; font-weight:800; line-height:1.1; color:var(--ink); }
@@ -84,12 +84,17 @@ button { cursor:pointer; }
    verde/gris normal, sin importar si quedó encendido o apagado. */
 .lamp-status.forced .status-icon { color:#a15c00; background:#fff1d6; }
 .lamp-status.forced .status-text b { color:#a15c00; }
-.schedule-row { display:flex; align-items:center; justify-content:space-between; margin-top:16px; padding-top:15px; border-top:1px solid var(--line); }
+.schedule-scope { margin-top:16px; padding-top:15px; border-top:1px solid var(--line); color:#7c8798; font-size:11px; font-weight:650; text-align:center; }
+.schedule-row { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:8px; }
 .schedule-col { position:relative; display:flex; min-width:0; flex-direction:column; gap:3px; padding:0; border:0; background:transparent; text-align:left; cursor:pointer; }
 .schedule-col .label { color:#7c8798; font-size:11px; font-weight:650; }
 .schedule-col .value { color:#071c3e; font-size:15px; font-weight:800; white-space:nowrap; transition:color .15s; }
 .schedule-col:hover .value { color:#0874ff; }
-.schedule-dot { color:#c7cedb; font-size:15px; }
+/* Ícono de lápiz entre Encendido/Apagado: abre el horario de sábado y
+   domingo, aparte del horario de lunes a viernes que muestran esas dos
+   columnas. */
+.schedule-edit-weekend { display:grid; flex:0 0 26px; width:26px; height:26px; place-items:center; border:1px solid var(--line); border-radius:50%; color:#8a95a8; background:#f4f6f9; }
+.schedule-edit-weekend:hover { background:#eef1f5; color:#0874ff; border-color:#c7d2e0; }
 
 .modal-backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px; background:rgba(6,20,45,.5); }
 .modal-box { width:min(320px,100%); padding:22px 22px 24px; border-radius:16px; background:#fff; box-shadow:0 24px 60px rgba(5,27,60,.3); }
@@ -104,6 +109,11 @@ button { cursor:pointer; }
 .modal-field input:focus { border-color:#0874ff; outline:2px solid rgba(8,116,255,.18); }
 .modal-field input::-webkit-inner-spin-button,.modal-field input::-webkit-outer-spin-button { margin:0; -webkit-appearance:none; }
 .modal-colon { padding-bottom:13px; color:#c7cedb; font-size:22px; font-weight:800; }
+.modal-hint { margin:0 0 16px; color:#7c8798; font-size:12px; font-weight:600; line-height:1.4; }
+.modal-weekend-row { margin-bottom:14px; }
+.modal-weekend-row:last-of-type { margin-bottom:20px; }
+.modal-weekend-label { display:block; margin-bottom:6px; color:#385274; font-size:12px; font-weight:800; }
+.modal-weekend-row .modal-body { margin:0; }
 .modal-actions { display:flex; gap:10px; }
 .modal-cancel { flex:1; height:42px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); font-size:13px; font-weight:700; }
 .modal-cancel:hover { background:#f6f9fd; }
@@ -158,13 +168,24 @@ button { cursor:pointer; }
 @media (max-width:1050px) { .dashboard-content { grid-template-columns:1fr; }.right-rail { grid-template-columns:repeat(3,minmax(0,1fr)); }.status-card,.quick { height:auto; }.lamp-board { grid-template-columns:repeat(3,minmax(160px,1fr)); } }
 
 @media (max-width:860px) {
-  .sip-shell { display:block; }
+  .sip-shell { display:block; width:100%; }
   .sip-main { width:100%; }
 
+  /* La barra de arriba y el cajón ahora son "fixed" (ancladas a la pantalla
+     completa, con left:0/right:0 en vez de depender de "ser 100% de mi
+     contenedor") en vez de "sticky" — así ninguna de las dos se pone
+     angosta por culpa de cómo esté midiendo el ancho el navegador donde se
+     abra la página (pasó adentro del navegador integrado de WhatsApp: la
+     barra se quedaba cortada de un lado). Como "fixed" saca la barra del
+     flujo normal, hay que dejarle un espacio de su mismo alto (56px) arriba
+     del contenido para que no quede tapado debajo de ella — eso es el
+     padding-top de .sip-main aquí abajo. */
   .mobile-topbar {
     display:flex;
-    position:sticky;
+    position:fixed;
     top:0;
+    left:0;
+    right:0;
     z-index:30;
     align-items:center;
     gap:14px;
@@ -173,11 +194,18 @@ button { cursor:pointer; }
     background:linear-gradient(100deg,#001c41,#00234d);
     box-shadow:0 2px 10px rgba(0,10,30,.18);
   }
+  .sip-main { padding-top:56px; }
 
   /* En escritorio el sidebar es una columna fija de la grilla, siempre a la
      vista; en celular se convierte en un cajón que entra desde la izquierda
      encima de todo lo demás, y se queda oculto (fuera de la pantalla) hasta
-     que se abre con el botón de menú. */
+     que se abre con el botón de menú. La altura se pone con 100vh Y con
+     100dvh (dvh = "altura de viewport dinámica"): en navegadores/webviews
+     donde la barra de direcciones o los botones de abajo tapan parte de la
+     pantalla (como el navegador integrado de WhatsApp), 100vh puede medir
+     mal y dejar el cajón corto — 100dvh es la medida correcta ahí, y los
+     navegadores que no la entienden simplemente se quedan con el 100vh de
+     antes (no se rompe nada). */
   .sip-sidebar {
     position:fixed;
     top:0;
@@ -185,6 +213,7 @@ button { cursor:pointer; }
     z-index:50;
     width:min(280px,84vw);
     height:100vh;
+    height:100dvh;
     transform:translateX(-100%);
     transition:transform .25s ease;
     box-shadow:14px 0 34px rgba(0,10,30,.35);
@@ -324,5 +353,7 @@ button { cursor:pointer; }
 .historial-tag.off { color:#4e6080; background:#eef1f5; }
 .historial-tag.mode { color:#0058c9; background:#e6f0ff; }
 .historial-tag.force { color:#b5690a; background:#fdf0dd; }
+.historial-tag.online { color:#00984a; background:#e8f7ef; }
+.historial-tag.offline { color:#c0263f; background:#fbe4e8; }
 .historial-note { margin:0; padding:10px 20px 18px; color:#7c8798; font-size:12px; }
 @media (max-width:720px) { .historial-filters { flex-direction:column; align-items:stretch; } }
