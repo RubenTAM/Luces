@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getLampsState, releaseLampForce, setLampPower, setLampSchedule } from "../../mqtt-client";
+import { getLampsState, releaseLampForce, setLampPower, setLampSchedule, setLampSundayEnabled } from "../../mqtt-client";
 
 // Nunca cachear: siempre queremos el último estado reportado por el broker.
 export const dynamic = "force-dynamic";
@@ -36,10 +36,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Formato de hora inválido, se espera HH:MM" }, { status: 400 });
     }
     // "scope" distingue si se está editando el horario de lunes a viernes
-    // (default, para no romper llamadas viejas que no lo mandan) o el de
-    // sábado y domingo, capturado desde el ícono de lápiz de la tarjeta.
-    const scope = body.scope === "weekend" ? "weekend" : "weekday";
+    // (default, para no romper llamadas viejas que no lo mandan), el de
+    // sábado, o el de domingo — capturados desde el ícono de lápiz de la
+    // tarjeta.
+    const scope = body.scope === "saturday" ? "saturday" : body.scope === "sunday" ? "sunday" : "weekday";
     await setLampSchedule(lampId, body.which, body.time, scope);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Habilitar/deshabilitar el horario de domingo (domingo arranca apagado
+  // todo el día, sin horario, a propósito).
+  if (typeof body.sundayEnabled === "boolean") {
+    await setLampSundayEnabled(lampId, body.sundayEnabled);
     return NextResponse.json({ ok: true });
   }
 

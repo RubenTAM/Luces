@@ -22,24 +22,24 @@ const SCHEDULE_TOPIC = "sip/dashboard/schedule";
 // invalidateMqttConfigCache más abajo).
 
 export type LampState = {
-  // onTime/offTime son el horario EFECTIVO de hoy: entre semana son el
-  // horario de lunes a viernes, y en sábado/domingo son el de fin de
-  // semana (weekendOnTime/weekendOffTime) — así la tarjeta, al llegar el
-  // sábado, muestra sola el horario de fin de semana, y al volver el lunes
-  // vuelve a mostrar el de lunes a viernes, sin que nadie tenga que hacer
-  // nada.
+  // onTime/offTime son el horario EFECTIVO de hoy: entre semana son el de
+  // lunes a viernes, sábado es el de saturdayOnTime/saturdayOffTime, y
+  // domingo es el de sundayOnTime/sundayOffTime SOLO si sundayEnabled es
+  // true — si domingo no está habilitado, la lámpara se queda apagada todo
+  // el día (nadie trabaja, salvo casos extraordinarios que se manejan con
+  // el forzado manual). "scope" le dice al frontend cuál de los tres es hoy.
   onTime: string;
   offTime: string;
-  // Horario de sábado y domingo tal cual está guardado (no cambia según el
-  // día): lo usa el modal del ícono de lápiz para poder configurarlo desde
-  // cualquier día de la semana.
-  weekendOnTime: string;
-  weekendOffTime: string;
-  // true si, según el reloj del PLC de esta lámpara, hoy es sábado o
-  // domingo — le dice al frontend si onTime/offTime de arriba son el
-  // horario de fin de semana o el de entre semana, y a cuál de los dos
-  // debe editar si el usuario le pica a "Encendido"/"Apagado" en la tarjeta.
-  isWeekendToday: boolean;
+  scope: "weekday" | "saturday" | "sunday";
+  // Horario de sábado tal cual está guardado (no cambia según el día): lo
+  // usa el modal del ícono de lápiz.
+  saturdayOnTime: string;
+  saturdayOffTime: string;
+  // Horario de domingo tal cual está guardado, y si domingo está
+  // habilitado. Domingo empieza deshabilitado por default.
+  sundayOnTime: string;
+  sundayOffTime: string;
+  sundayEnabled: boolean;
   isOn: boolean | null;
   mode: "AUTO" | "MAN" | null;
   // true = alguien forzó el encendido/apagado desde el dashboard: el horario
@@ -55,11 +55,16 @@ type ReportedLampState = {
 type ScheduleEntry = {
   onTime: string;
   offTime: string;
-  // Horario de sábado y domingo (fin de semana), separado del horario de
-  // lunes a viernes de arriba. Se edita desde el ícono de lápiz en la
+  // Sábado y domingo van cada uno por su cuenta (ya no comparten un solo
+  // horario de "fin de semana"). Se editan desde el ícono de lápiz en la
   // tarjeta, sin importar qué día sea hoy.
-  weekendOnTime: string;
-  weekendOffTime: string;
+  saturdayOnTime: string;
+  saturdayOffTime: string;
+  sundayOnTime: string;
+  sundayOffTime: string;
+  // Domingo es descanso por default: la lámpara no enciende sola ese día
+  // salvo que alguien habilite un horario aquí a propósito.
+  sundayEnabled: boolean;
 };
 
 type LampConfig = {
@@ -186,7 +191,17 @@ const CONFIG_TTL_MS = 15_000;
 
 function ensureLampDefaults(id: number) {
   if (!state.reported[id]) state.reported[id] = { isOn: null, mode: null };
-  if (!state.schedule[id]) state.schedule[id] = { onTime: "18:00", offTime: "06:00", weekendOnTime: "18:00", weekendOffTime: "06:00" };
+  if (!state.schedule[id]) {
+    state.schedule[id] = {
+      onTime: "18:00",
+      offTime: "06:00",
+      saturdayOnTime: "18:00",
+      saturdayOffTime: "06:00",
+      sundayOnTime: "18:00",
+      sundayOffTime: "06:00",
+      sundayEnabled: false,
+    };
+  }
   if (!(id in state.commandedOn)) state.commandedOn[id] = null;
   if (!(id in state.commandedAt)) state.commandedAt[id] = 0;
   if (!(id in state.forced)) state.forced[id] = false;
@@ -215,20 +230,25 @@ function logoDayOfWeek(epochSeconds: number): number {
   return new Date(epochSeconds * 1000).getUTCDay();
 }
 
-function isWeekendDay(dayOfWeek: number): boolean {
-  return dayOfWeek === 0 || dayOfWeek === 6;
+type ScheduleScope = "weekday" | "saturday" | "sunday";
+
+function scheduleScopeForDay(dayOfWeek: number): ScheduleScope {
+  if (dayOfWeek === 0) return "sunday";
+  if (dayOfWeek === 6) return "saturday";
+  return "weekday";
 }
 
 // true si "now" cae dentro de la ventana [onTime, offTime), soportando
 // horarios que cruzan medianoche (ej. enciende 18:00, apaga 06:00).
 function isWithinSchedule(logoTimeSeconds: number, entry: ScheduleEntry): boolean {
   const now = logoMinutesOfDay(logoTimeSeconds);
-  // Sábado y domingo usan weekendOnTime/weekendOffTime en vez del horario
-  // de lunes a viernes — el mismo día (según el reloj de ESTE PLC) que ya
-  // se usa para decidir la hora del día de arriba.
-  const weekend = isWeekendDay(logoDayOfWeek(logoTimeSeconds));
-  const on = minutesOfDay(weekend ? entry.weekendOnTime : entry.onTime);
-  const off = minutesOfDay(weekend ? entry.weekendOffTime : entry.offTime);
+  // El horario que aplica depende del día (según el reloj de ESTE PLC, el
+  // mismo que ya se usa para decidir la hora del día de arriba). Domingo
+  // sin habilitar = la lámpara nunca enciende sola ese día.
+  const scope = scheduleScopeForDay(logoDayOfWeek(logoTimeSeconds));
+  if (scope === "sunday" && !entry.sundayEnabled) return false;
+  const on = minutesOfDay(scope === "saturday" ? entry.saturdayOnTime : scope === "sunday" ? entry.sundayOnTime : entry.onTime);
+  const off = minutesOfDay(scope === "saturday" ? entry.saturdayOffTime : scope === "sunday" ? entry.sundayOffTime : entry.offTime);
   if (on === off) return false;
   if (on < off) return now >= on && now < off;
   return now >= on || now < off;
@@ -309,13 +329,28 @@ function loadPersistedSchedule(payload: Buffer) {
       const entry = data[key];
       if (entry && TIME_RE.test(entry.onTime) && TIME_RE.test(entry.offTime)) {
         ensureLampDefaults(id);
-        // Mensajes retenidos guardados antes de que existiera el horario de
-        // fin de semana no traen weekendOnTime/weekendOffTime — en ese caso
-        // se usa el mismo horario de lunes a viernes como valor inicial,
-        // para no dejarlo en blanco la primera vez que se lee.
-        const weekendOnTime = TIME_RE.test(entry.weekendOnTime) ? entry.weekendOnTime : entry.onTime;
-        const weekendOffTime = TIME_RE.test(entry.weekendOffTime) ? entry.weekendOffTime : entry.offTime;
-        state.schedule[id] = { onTime: entry.onTime, offTime: entry.offTime, weekendOnTime, weekendOffTime };
+        // Mensajes retenidos de versiones anteriores no traen
+        // saturdayOnTime/sundayOnTime (o los tenían combinados en un solo
+        // "weekendOnTime/weekendOffTime") — en cualquiera de esos casos se
+        // usa lo más parecido que haya como valor inicial, para no dejarlo
+        // en blanco la primera vez que se lee. sundayEnabled, si nunca se
+        // guardó, arranca en false (domingo apagado por default).
+        const legacyWeekendOn = TIME_RE.test(entry.weekendOnTime) ? entry.weekendOnTime : entry.onTime;
+        const legacyWeekendOff = TIME_RE.test(entry.weekendOffTime) ? entry.weekendOffTime : entry.offTime;
+        const saturdayOnTime = TIME_RE.test(entry.saturdayOnTime) ? entry.saturdayOnTime : legacyWeekendOn;
+        const saturdayOffTime = TIME_RE.test(entry.saturdayOffTime) ? entry.saturdayOffTime : legacyWeekendOff;
+        const sundayOnTime = TIME_RE.test(entry.sundayOnTime) ? entry.sundayOnTime : legacyWeekendOn;
+        const sundayOffTime = TIME_RE.test(entry.sundayOffTime) ? entry.sundayOffTime : legacyWeekendOff;
+        const sundayEnabled = typeof entry.sundayEnabled === "boolean" ? entry.sundayEnabled : false;
+        state.schedule[id] = {
+          onTime: entry.onTime,
+          offTime: entry.offTime,
+          saturdayOnTime,
+          saturdayOffTime,
+          sundayOnTime,
+          sundayOffTime,
+          sundayEnabled,
+        };
       }
     }
   } catch (err) {
@@ -582,18 +617,23 @@ export async function getLampsState(): Promise<{
     ensureLampDefaults(lamp.id);
     const reported = state.reported[lamp.id];
     const schedule = state.schedule[lamp.id];
-    // "Hoy es fin de semana" se decide con el reloj del PLC AL QUE
-    // PERTENECE esta lámpara (mismo criterio que evaluateSchedule), no con
-    // la hora de quien esté viendo el Dashboard — si todavía no tenemos la
-    // hora de ese PLC, se asume entre semana por default.
+    // Qué día es "hoy" se decide con el reloj del PLC AL QUE PERTENECE esta
+    // lámpara (mismo criterio que evaluateSchedule), no con la hora de
+    // quien esté viendo el Dashboard — si todavía no tenemos la hora de ese
+    // PLC, se asume entre semana por default.
     const plcTime = lamp.plcId !== null ? state.plcLogoTime[lamp.plcId] : undefined;
-    const isWeekendToday = plcTime !== undefined && isWeekendDay(logoDayOfWeek(plcTime));
+    const scope = plcTime !== undefined ? scheduleScopeForDay(logoDayOfWeek(plcTime)) : "weekday";
+    const onTime = scope === "saturday" ? schedule.saturdayOnTime : scope === "sunday" ? schedule.sundayOnTime : schedule.onTime;
+    const offTime = scope === "saturday" ? schedule.saturdayOffTime : scope === "sunday" ? schedule.sundayOffTime : schedule.offTime;
     lamps[lamp.id] = {
-      onTime: isWeekendToday ? schedule.weekendOnTime : schedule.onTime,
-      offTime: isWeekendToday ? schedule.weekendOffTime : schedule.offTime,
-      weekendOnTime: schedule.weekendOnTime,
-      weekendOffTime: schedule.weekendOffTime,
-      isWeekendToday,
+      onTime,
+      offTime,
+      scope,
+      saturdayOnTime: schedule.saturdayOnTime,
+      saturdayOffTime: schedule.saturdayOffTime,
+      sundayOnTime: schedule.sundayOnTime,
+      sundayOffTime: schedule.sundayOffTime,
+      sundayEnabled: schedule.sundayEnabled,
       isOn: reported.isOn,
       mode: reported.mode,
       forced: state.forced[lamp.id] ?? false,
@@ -644,12 +684,31 @@ export async function getLampsState(): Promise<{
 // Guarda el horario de encendido/apagado de una lámpara EN ESTE SERVIDOR
 // (ya no se le manda al LOGO) y re-evalúa de inmediato por si ya toca
 // encender/apagar con el nuevo horario.
-export async function setLampSchedule(id: number, which: "on" | "off", time: string, scope: "weekday" | "weekend" = "weekday"): Promise<void> {
+export async function setLampSchedule(id: number, which: "on" | "off", time: string, scope: ScheduleScope = "weekday"): Promise<void> {
   ensureLampDefaults(id);
-  const key = scope === "weekend"
-    ? (which === "on" ? "weekendOnTime" : "weekendOffTime")
-    : (which === "on" ? "onTime" : "offTime");
+  const key = scope === "saturday"
+    ? (which === "on" ? "saturdayOnTime" : "saturdayOffTime")
+    : scope === "sunday"
+      ? (which === "on" ? "sundayOnTime" : "sundayOffTime")
+      : (which === "on" ? "onTime" : "offTime");
   state.schedule[id][key] = time;
+
+  const client = getClient();
+  persistSchedule(client);
+
+  const cfg = await getConfig();
+  const lamp = findLampByPosition(cfg, id);
+  if (lamp) evaluateSchedule(client, lamp, findPlc(cfg, lamp.plcId));
+}
+
+// Habilita/deshabilita el horario de domingo de una lámpara. Domingo
+// arranca deshabilitado (la lámpara se queda apagada todo el día): esto es
+// lo que prende o apaga esa excepción, sin tocar las horas guardadas en
+// sundayOnTime/sundayOffTime (así, si se deshabilita y luego se vuelve a
+// habilitar, el horario que ya se había puesto sigue ahí).
+export async function setLampSundayEnabled(id: number, enabled: boolean): Promise<void> {
+  ensureLampDefaults(id);
+  state.schedule[id].sundayEnabled = enabled;
 
   const client = getClient();
   persistSchedule(client);

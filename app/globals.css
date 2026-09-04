@@ -109,9 +109,14 @@ button { cursor:pointer; }
 .modal-field input:focus { border-color:#0874ff; outline:2px solid rgba(8,116,255,.18); }
 .modal-field input::-webkit-inner-spin-button,.modal-field input::-webkit-outer-spin-button { margin:0; -webkit-appearance:none; }
 .modal-colon { padding-bottom:13px; color:#c7cedb; font-size:22px; font-weight:800; }
-.modal-hint { margin:0 0 16px; color:#7c8798; font-size:12px; font-weight:600; line-height:1.4; }
+.modal-section { margin-bottom:18px; }
+.modal-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.modal-section-title { margin:0 0 10px; color:#071c3e; font-size:13px; font-weight:800; }
+.modal-section-head .modal-section-title { margin-bottom:0; }
+.modal-sunday-toggle { display:flex; align-items:center; gap:6px; color:#385274; font-size:12px; font-weight:700; cursor:pointer; }
+.modal-sunday-toggle input { width:15px; height:15px; accent-color:#0874ff; }
 .modal-weekend-row { margin-bottom:14px; }
-.modal-weekend-row:last-of-type { margin-bottom:20px; }
+.modal-weekend-row:last-of-type { margin-bottom:0; }
 .modal-weekend-label { display:block; margin-bottom:6px; color:#385274; font-size:12px; font-weight:800; }
 .modal-weekend-row .modal-body { margin:0; }
 .modal-actions { display:flex; gap:10px; }
